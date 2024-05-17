@@ -5,15 +5,16 @@
 #include <assert.h>
 #include <stddef.h>
 #include <unistd.h>
+#include <stdint.h>
 
-typedef unsigned int u32;
-typedef int i32;
-typedef unsigned long long u64;
-typedef long long i64;
-typedef unsigned char u8;
-typedef char i8;
-typedef unsigned short u16;
-typedef short i16;
+typedef uint32_t u32;
+typedef int32_t i32;
+typedef uint64_t u64;
+typedef int64_t i64;
+typedef uint8_t u8;
+typedef int8_t i8;
+typedef uint16_t u16;
+typedef int16_t i16;
 typedef float f32;
 typedef double f64;
 
@@ -159,7 +160,7 @@ static const Str i32_Printer(va_list * _Nonnull args) {
         len++;
         temp /= 10;
     }
-    char *str = malloc(len + 1);
+    char *str = (char *)malloc(len + 1);
     str[len] = '\0';
     temp = number;
     if (temp < 0) {
@@ -179,7 +180,7 @@ static const Str i32_Printer(va_list * _Nonnull args) {
 static const Str u32_Printer(va_list * _Nonnull args) {
     u32 number = va_arg(*args, u32);
     if (number == 0) {
-        char *str = malloc(2);
+        char *str = (char *)malloc(2);
         str[0] = '0';
         str[1] = '\0';
         return (Str){str, 1};
@@ -191,7 +192,7 @@ static const Str u32_Printer(va_list * _Nonnull args) {
         len++;
         temp /= 10;
     }
-    char *str = malloc(len + 1);
+    char *str = (char *)malloc(len + 1);
     str[len+1] = '\0';
     temp = number;
     for (i32 i = len - 1; i >= 0; i--) {
@@ -216,7 +217,7 @@ static const Str i64_Printer(va_list * _Nonnull args) {
         len++;
         temp /= 10;
     }
-    char *str = malloc(len + 1);
+    char *str = (char *)malloc(len + 1);
     str[len] = '\0';
     temp = number;
     if (temp < 0) {
@@ -236,7 +237,7 @@ static const Str i64_Printer(va_list * _Nonnull args) {
 static const Str u64_Printer(va_list * _Nonnull args) {
     u64 number = va_arg(*args, u64);
     if (number == 0) {
-        char *str = malloc(2);
+        char *str = (char *)malloc(2);
         str[0] = '0';
         str[1] = '\0';
         return (Str){str, 1};
@@ -248,7 +249,7 @@ static const Str u64_Printer(va_list * _Nonnull args) {
         len++;
         temp /= 10;
     }
-    char *str = malloc(len + 1);
+    char *str = (char *)malloc(len + 1);
     str[len+1] = '\0';
     temp = number;
     for (i32 i = len - 1; i >= 0; i--) {
@@ -290,7 +291,7 @@ static const Str f32_Printer(va_list * _Nonnull args) {
                 len++;
                 temp /= 10;
             }
-            char *str = malloc(len + 1);
+            char *str = (char *)malloc(len + 1);
             str[len] = '\0';
             temp = int_part;
             if (temp < 0) {
@@ -318,7 +319,7 @@ static const Str f32_Printer(va_list * _Nonnull args) {
                 temp = -temp;
             }
             len += pad_with_zero;
-            char *str = malloc(len + 1);
+            char *str = (char *)malloc(len + 1);
             str[len] = '\0';
             temp = frac_part_i32;
             if (temp < 0) {
@@ -375,7 +376,7 @@ static const Str f64_Printer(va_list * _Nonnull args) {
                 len++;
                 temp /= 10;
             }
-            char *str = malloc(len + 1);
+            char *str = (char *)malloc(len + 1);
             str[len] = '\0';
             temp = int_part;
             if (temp < 0) {
@@ -403,7 +404,7 @@ static const Str f64_Printer(va_list * _Nonnull args) {
                 temp = -temp;
             }
             len += pad_with_zero;
-            char *str = malloc(len + 1);
+            char *str = (char *)malloc(len + 1);
             str[len] = '\0';
             temp = frac_part_i32;
             if (temp < 0) {
