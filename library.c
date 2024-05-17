@@ -1,3 +1,4 @@
+#define LIBS_IMPLEMENTATION
 #include "library.h"
 
 #include <stdio.h>
@@ -6,9 +7,9 @@ typedef struct {
     double y;
 } Point;
 
-void Point_Printer( va_list *args ) {
+const Str Point_Printer( va_list *args ) {
     Point point = va_arg(*args, Point);
-    printf( "{%f, %f}", point.x, point.y );
+    return str_format("\\{x={f32}, y={f32}}", point.x, point.y );
 }
 
 int int_less( const void *a, const void *b ) {
@@ -34,31 +35,31 @@ int main(void) {
 //    print("{u32}\n", -0);
     print("{f32}\n", 7.0045000301);
 
-//    ArrayList arr = arraylist_new(sizeof(i32));
-//    array_push(&arr, -1);
-//    array_push(&arr, 9);
-//    array_push(&arr, -2);
-//    array_push(&arr, 4);
-//    array_push(&arr, -8);
-//
-//    forward_it(arr, i32) {
-//        print("{i32}\n", *it);
-//    }
+    ArrayList arr = arraylist_new(sizeof(i32));
+    array_push(&arr, -1);
+    array_push(&arr, 9);
+    array_push(&arr, -2);
+    array_push(&arr, 4);
+    array_push(&arr, -8);
+
+    forward_it(arr, i32) {
+        print("{i32}\n", *it);
+    }
 //    arraylist_sort(arr, int_less);
 //    forward_it(arr, i32) {
 //        print("{i32}\n", *it);
 //    }
 //
-//    str_register( "{Point}", Point_Printer);
-//
-//    ArrayList points = arraylist_new(sizeof(Point));
-//    arraylist_push(&points, &(Point){1.0, 2.0});
-//    arraylist_push(&points, &(Point){3.0, 4.0});
-//    arraylist_push(&points, &(Point){5.0, 6.0});
-//
-//    forward_it(points, Point) {
-//        print("{Point}\n", *it);
-//    }
+    str_register( "{Point}", Point_Printer);
+
+    ArrayList points = arraylist_new(sizeof(Point));
+    arraylist_push(&points, &(Point){1.2, 2.0});
+    arraylist_push(&points, &(Point){3.0, 4.0});
+    arraylist_push(&points, &(Point){5.0, 6.0});
+
+    forward_it(points, Point) {
+        print("{Point}\n", *it);
+    }
 //
 //    Point *last_point = &arraylist_at(points, 2, Point);
 //

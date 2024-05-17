@@ -1,6 +1,5 @@
-#ifndef LIBS_LIBRARY_H
-#define LIBS_LIBRARY_H
-
+#ifndef LIB_H
+#define LIB_H
 #include <printf.h>
 #include <stdlib.h>
 #include <assert.h>
@@ -17,7 +16,7 @@ typedef unsigned short u16;
 typedef short i16;
 typedef float f32;
 typedef double f64;
-typedef int bool;
+
 #define false 0
 #define true 1
 
@@ -54,7 +53,7 @@ void arraylist_remove(ArrayList * _Nonnull list, u32 index);
 void arraylist_free(ArrayList * _Nonnull list);
 
 #define arraylist_last(list, type) ((type *)list.data)[list.len - 1]
-#define forward_it(list, type) for (type *it = list.data; it != (type *)list.data + list.len; it++)
+#define forward_it(list, type) for (type *it = (type *)(list).data; it != (type *)(list).data + (list).len; it++)
 #define reverse_it(list, type) for (type *it = &arraylist_last(list, type); it != (type *)list.data-1; it--)
 #define arraylist_at(list, index, type) ((type *)list.data)[index]
 #define arraylist_sort(list, compare) qsort((list).data, (list).len, (list).elem_size, compare);
@@ -62,12 +61,14 @@ void arraylist_free(ArrayList * _Nonnull list);
 
 // ======= STRING LIBRARY =======
 
-typedef struct Str {
+typedef struct {
     const char * _Nonnull str;
     u32 len;
 } Str;
 
-typedef struct FormatOption {
+typedef Str IStr;
+
+typedef struct {
     Str format;
     const Str (* _Nonnull printer)(va_list * _Nonnull args);
 } FormatOption;
@@ -81,20 +82,23 @@ const Str str_concat(const Str a, const Str b);
 const Str str_from_cstr(const char * _Nonnull cstr);
 bool str_a_contains_b(const Str a, const Str b);
 
+const Str str_build_from_arraylist( const ArrayList * _Nonnull list );
+
 const Str __attribute__((overloadable)) str_format(char * _Nonnull format, ...);
 const Str __attribute__((overloadable)) str_format(const Str format, ...);
 
 void str_register(const char * _Nonnull format, const Str (* _Nonnull printer)(va_list * _Nonnull args));
 
-#ifndef LIBS_IMPLEMENTATION
-#define LIBS_IMPLEMENTATION
+#endif
+#define LIBS_IMPLEMENTATION 
+#ifdef LIBS_IMPLEMENTATION
 
 ArrayList arraylist_new(u32 elem_size) {
     ArrayList list = {
-        .len = 0,
-        .elem_size = elem_size,
-        .cap = ARRAY_LIST_DEFAULT_CAP,
-        .data = malloc(ARRAY_LIST_DEFAULT_CAP * elem_size)
+            .len = 0,
+            .elem_size = elem_size,
+            .cap = ARRAY_LIST_DEFAULT_CAP,
+            .data = malloc(ARRAY_LIST_DEFAULT_CAP * elem_size)
     };
     assert(list.data); // Failed to allocate memory.
     return list;
@@ -132,6 +136,7 @@ void arraylist_remove(ArrayList * _Nonnull list, u32 index) {
 
 static u32 _num_options = 0;
 static FormatOption options[MAX_FORMAT_OPTIONS] = {0};
+
 void str_register(const char * _Nonnull format, const Str (* _Nonnull printer)(va_list * _Nonnull args)) {
     assert(_num_options < MAX_FORMAT_OPTIONS); // Ensure that enough space has been allocated for the format options.
     options[_num_options].format = str_from_cstr(format);
@@ -319,14 +324,14 @@ static const Str f32_Printer(va_list * _Nonnull args) {
             if (temp < 0) {
                 temp = -temp;
             }
-            for (u32 i = len - 1; i > 0; i--) {
+            for (i32 i = len - 1; i > 0; i--) {
                 str[i] = (temp % 10) + '0';
                 temp /= 10;
             }
             if (temp >= 0) {
                 str[0] = (temp % 10) + '0';
             }
-            for (u32 i = 0; i < pad_with_zero; i++) {
+            for (i32 i = 0; i < pad_with_zero; i++) {
                 str[i] = '0';
             }
             frac_str = (Str) {str, len};
@@ -411,7 +416,7 @@ static const Str f64_Printer(va_list * _Nonnull args) {
             if (temp >= 0) {
                 str[0] = (temp % 10) + '0';
             }
-            for (u32 i = 0; i < pad_with_zero; i++) {
+            for (i32 i = 0; i < pad_with_zero; i++) {
                 str[i] = '0';
             }
             frac_str = (Str) {str, len};
@@ -424,7 +429,7 @@ static const Str f64_Printer(va_list * _Nonnull args) {
 }
 
 static const Str bool_Printer(va_list * _Nonnull args) {
-    bool i = va_arg(*args, bool);
+    bool i = va_arg(*args, u32);
     if (i) {
         return str_from_cstr("true");
     } else {
@@ -457,19 +462,21 @@ static inline const Str str_format_impl(const Str format, va_list args ) {
     for (u32 i = 0; i < format.len; i++) {
         if (format.str[i] == '\\' && format.str[i + 1] == '{') {
             // We want to print upto here, but not the next character.
-            arraylist_push(&strs, &(Str){
-                    .str = format.str + last_printed,
-                    .len = i - last_printed
-            });
+            Str temp_str = {
+                .str = format.str + last_printed,
+                .len = i - last_printed
+            };
+            arraylist_push(&strs, &temp_str);
             i++;
-            last_printed = i + 1;
+            last_printed = i;
             continue;
         }
         if (format.str[i] == '{') {
-            arraylist_push(&strs, &(Str){
-                    .str = format.str + last_printed,
-                    .len = i - last_printed
-            });
+            Str temp_str = {
+                .str = format.str + last_printed,
+                .len = i - last_printed
+            };
+            arraylist_push(&strs, &temp_str);
             u32 j = i;
             bool found = false;
             while (j < format.len) {
@@ -487,7 +494,7 @@ static inline const Str str_format_impl(const Str format, va_list args ) {
                 for ( u32 k = 0; k < _num_options; k++ ) {
                     if ( str_eq( option, options[k].format ) ) {
                         const Str fmt = options[k].printer(&args);
-                        arraylist_push(&strs, &fmt);
+                        arraylist_push(&strs, (void*)&fmt);
                         i = j + 1;
                         found = true;
                         break;
@@ -500,26 +507,16 @@ static inline const Str str_format_impl(const Str format, va_list args ) {
             }
         }
     }
-    arraylist_push(&strs, &(Str){
-            .str = format.str + last_printed,
-            .len = format.len - last_printed
-    });
-    u32 total_len = 0;
-    forward_it(strs, Str) {
-        total_len += it->len;
-    }
-    char *str = malloc(total_len + 1);
-    u32 offset = 0;
-    forward_it(strs, Str) {
-        for (u32 i = 0; i < it->len; i++) {
-            str[offset + i] = it->str[i];
-        }
-        offset += it->len;
-    }
-    str[total_len] = '\0';
+    Str temp_str = {
+        .str = format.str + last_printed,
+        .len = format.len - last_printed
+    };
+    arraylist_push(&strs, &temp_str);
+
+    Str out = str_build_from_arraylist(&strs);
 
     arraylist_free(&strs);
-    return (Str){str, total_len};
+    return out;
 }
 
 const Str __attribute__((overloadable)) str_format(char * _Nonnull format_c, ...) {
@@ -558,7 +555,7 @@ void __attribute__((overloadable)) print(const Str format, ...) {
 
 const Str str_concat(const Str a, const Str b) {
     u32 len = a.len + b.len;
-    char *str = malloc(len + 1);
+    char *str = (char*)malloc(len + 1);
     for (u32 i = 0; i < a.len; i++) {
         str[i] = a.str[i];
     }
@@ -609,6 +606,21 @@ bool str_a_contains_b(Str a, Str b) {
     return 0;
 }
 
-#endif
+const Str str_build_from_arraylist( const ArrayList * _Nonnull list ) {
+    u32 total_len = 0;
+    forward_it(*list, Str) {
+        total_len += it->len;
+    }
+    char *str = (char*)malloc(total_len + 1);
+    u32 offset = 0;
+    forward_it(*list, Str) {
+        for (u32 i = 0; i < it->len; i++) {
+            str[offset + i] = it->str[i];
+        }
+        offset += it->len;
+    }
+    str[total_len] = '\0';
+    return (Str){str, total_len};
+}
 
-#endif //LIBS_LIBRARY_H
+#endif
