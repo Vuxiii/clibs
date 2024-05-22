@@ -1,5 +1,5 @@
-#define LIBS_IMPLEMENTATION
-#include "library.h"
+#define JLIB_IMPL
+#include "jlib.h"
 
 #include <stdio.h>
 typedef struct {

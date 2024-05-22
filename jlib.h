@@ -1,11 +1,13 @@
-#ifndef LIB_H
-#define LIB_H
+#ifndef JLIB_H
+#define JLIB_H
 #include <printf.h>
 #include <stdlib.h>
 #include <assert.h>
 #include <stddef.h>
 #include <unistd.h>
 #include <stdint.h>
+#include <stdbool.h>
+#include <string.h>
 
 typedef uint32_t u32;
 typedef int32_t i32;
@@ -62,14 +64,14 @@ void arraylist_free(ArrayList * _Nonnull list);
 
 // ======= STRING LIBRARY =======
 
-typedef struct {
+typedef struct Str {
     const char * _Nonnull str;
     u32 len;
 } Str;
 
 typedef Str IStr;
 
-typedef struct {
+typedef struct FormatOption {
     Str format;
     const Str (* _Nonnull printer)(va_list * _Nonnull args);
 } FormatOption;
@@ -80,20 +82,71 @@ void __attribute__((overloadable)) print(const Str format, ...);
 
 bool str_eq(const Str a, const Str b);
 const Str str_concat(const Str a, const Str b);
-const Str str_from_cstr(const char * _Nonnull cstr);
+Str str_from_cstr(const char * _Nonnull cstr);
 bool str_a_contains_b(const Str a, const Str b);
 
-const Str str_build_from_arraylist( const ArrayList * _Nonnull list );
+Str str_build_from_arraylist( const ArrayList * _Nonnull list );
 
 const Str __attribute__((overloadable)) str_format(char * _Nonnull format, ...);
 const Str __attribute__((overloadable)) str_format(const Str format, ...);
 
 void str_register(const char * _Nonnull format, const Str (* _Nonnull printer)(va_list * _Nonnull args));
 
+#define cast(type, value) ((type)(value))
+#define jassert(condition, message) (assert(condition))
 #endif
-#define LIBS_IMPLEMENTATION 
-#ifdef LIBS_IMPLEMENTATION
+#ifdef JLIB_IMPL
 
+// MARK: - Argument Parser
+
+
+// MARK: - ArrayList New
+
+typedef struct ArrHeader {
+    u32 len;
+    u32 cap;
+} ArrHeader;
+
+#define j_al_header(list) (cast(ArrHeader *, list) - 1)
+#define j_al_len(list) (j_al_header(list)->len)
+#define j_al_cap(list) (j_al_header(list)->cap)
+#define _j_al_init(list) do\
+{                       \
+    if (list == NULL) { \
+        list = malloc(10 * sizeof(list[0]) + sizeof(ArrHeader)) + sizeof(ArrHeader); \
+        j_al_header(list)->len = 0;      \
+        j_al_header(list)->cap = 10;      \
+    }                   \
+} while(0)
+#define _j_al_next_size(list) (j_al_cap(list) * sizeof(list[0]) * 2)
+#define _j_al_realloc_new_size(list) (sizeof(ArrHeader) + _j_al_next_size(list))
+#define _j_al_realloc(list) do \
+{                             \
+    if(j_al_len(list) == j_al_cap(list)) { \
+        void *p = realloc(j_al_header(list), _j_al_realloc_new_size(list)); \
+        assert(("Failed to realloc\n", p)); \
+        list = p + sizeof(ArrHeader);      \
+        j_al_header(list)->cap *= 2;       \
+    }                          \
+} while(0)
+#define j_al_append(list, elem) do \
+{                                  \
+    _j_al_init(ints);               \
+    _j_al_realloc(ints);            \
+    list[j_al_len(list)] = elem;   \
+    j_al_header(list)->len += 1;   \
+} while(0)
+#define j_al_swap(list, i, j) do \
+{                               \
+    typeof(list[i]) temp = list[i]; \
+    list[i] = list[j];            \
+    list[j] = temp;               \
+} while(0)
+#define j_al_removeLast(list) (j_al_header(list)->len -= 1, list[j_al_len(list)])
+#define j_al_removeFirst(list) (memmove(list, list+1, sizeof(list[0]) * (j_al_len(list)-1)), j_al_header(list)->len -= 1)
+#define j_al_free(list) (free(j_al_header(list)), list = NULL)
+
+// MARK: - ArrayList
 ArrayList arraylist_new(u32 elem_size) {
     ArrayList list = {
             .len = 0,
@@ -112,8 +165,9 @@ void arraylist_free(ArrayList * _Nonnull list) {
 void arraylist_push(ArrayList * _Nonnull list, void * _Nonnull elem) {
     if (list->len == list->cap) {
         list->cap *= 2;
-        list->data = realloc(list->data, list->cap * list->elem_size);
-        assert(list->data); // Failed to reallocate memory.
+        void *p = realloc(list->data, list->cap * list->elem_size);
+        assert(p); // Failed to reallocate memory.
+        list->data = p;
     }
     u32 offset = list->len * list->elem_size;
     for (u32 i = 0; i < list->elem_size; i++) {
@@ -568,7 +622,7 @@ const Str str_concat(const Str a, const Str b) {
     return c;
 }
 
-const Str str_from_cstr(const char * _Nonnull cstr) {
+Str str_from_cstr(const char * _Nonnull cstr) {
     Str str = {cstr, 0};
     while (cstr[str.len] != '\0') {
         str.len++;
@@ -607,7 +661,7 @@ bool str_a_contains_b(Str a, Str b) {
     return 0;
 }
 
-const Str str_build_from_arraylist( const ArrayList * _Nonnull list ) {
+Str str_build_from_arraylist( const ArrayList * _Nonnull list ) {
     u32 total_len = 0;
     forward_it(*list, Str) {
         total_len += it->len;
