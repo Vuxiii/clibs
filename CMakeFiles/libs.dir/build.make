@@ -69,28 +69,28 @@ include CMakeFiles/libs.dir/progress.make
 # Include the compile flags for this target's objects.
 include CMakeFiles/libs.dir/flags.make
 
-CMakeFiles/libs.dir/library.c.o: CMakeFiles/libs.dir/flags.make
-CMakeFiles/libs.dir/library.c.o: library.c
-CMakeFiles/libs.dir/library.c.o: CMakeFiles/libs.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/not_archbtw/dev/c/libs/CMakeFiles --progress-num=$(CMAKE_PROGRESS_1) "Building C object CMakeFiles/libs.dir/library.c.o"
-	/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/cc $(C_DEFINES) $(C_INCLUDES) $(C_FLAGS) -MD -MT CMakeFiles/libs.dir/library.c.o -MF CMakeFiles/libs.dir/library.c.o.d -o CMakeFiles/libs.dir/library.c.o -c /Users/not_archbtw/dev/c/libs/library.c
+CMakeFiles/libs.dir/tree.c.o: CMakeFiles/libs.dir/flags.make
+CMakeFiles/libs.dir/tree.c.o: tree.c
+CMakeFiles/libs.dir/tree.c.o: CMakeFiles/libs.dir/compiler_depend.ts
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/not_archbtw/dev/c/libs/CMakeFiles --progress-num=$(CMAKE_PROGRESS_1) "Building C object CMakeFiles/libs.dir/tree.c.o"
+	/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/cc $(C_DEFINES) $(C_INCLUDES) $(C_FLAGS) -MD -MT CMakeFiles/libs.dir/tree.c.o -MF CMakeFiles/libs.dir/tree.c.o.d -o CMakeFiles/libs.dir/tree.c.o -c /Users/not_archbtw/dev/c/libs/tree.c
 
-CMakeFiles/libs.dir/library.c.i: cmake_force
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing C source to CMakeFiles/libs.dir/library.c.i"
-	/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/cc $(C_DEFINES) $(C_INCLUDES) $(C_FLAGS) -E /Users/not_archbtw/dev/c/libs/library.c > CMakeFiles/libs.dir/library.c.i
+CMakeFiles/libs.dir/tree.c.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing C source to CMakeFiles/libs.dir/tree.c.i"
+	/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/cc $(C_DEFINES) $(C_INCLUDES) $(C_FLAGS) -E /Users/not_archbtw/dev/c/libs/tree.c > CMakeFiles/libs.dir/tree.c.i
 
-CMakeFiles/libs.dir/library.c.s: cmake_force
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling C source to assembly CMakeFiles/libs.dir/library.c.s"
-	/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/cc $(C_DEFINES) $(C_INCLUDES) $(C_FLAGS) -S /Users/not_archbtw/dev/c/libs/library.c -o CMakeFiles/libs.dir/library.c.s
+CMakeFiles/libs.dir/tree.c.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling C source to assembly CMakeFiles/libs.dir/tree.c.s"
+	/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/cc $(C_DEFINES) $(C_INCLUDES) $(C_FLAGS) -S /Users/not_archbtw/dev/c/libs/tree.c -o CMakeFiles/libs.dir/tree.c.s
 
 # Object files for target libs
 libs_OBJECTS = \
-"CMakeFiles/libs.dir/library.c.o"
+"CMakeFiles/libs.dir/tree.c.o"
 
 # External object files for target libs
 libs_EXTERNAL_OBJECTS =
 
-liblibs.a: CMakeFiles/libs.dir/library.c.o
+liblibs.a: CMakeFiles/libs.dir/tree.c.o
 liblibs.a: CMakeFiles/libs.dir/build.make
 liblibs.a: CMakeFiles/libs.dir/link.txt
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --bold --progress-dir=/Users/not_archbtw/dev/c/libs/CMakeFiles --progress-num=$(CMAKE_PROGRESS_2) "Linking C static library liblibs.a"

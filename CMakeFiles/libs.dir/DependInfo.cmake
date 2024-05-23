@@ -8,7 +8,7 @@ set(CMAKE_DEPENDS_LANGUAGES
 
 # The set of dependency files which are needed:
 set(CMAKE_DEPENDS_DEPENDENCY_FILES
-  "/Users/not_archbtw/dev/c/libs/library.c" "CMakeFiles/libs.dir/library.c.o" "gcc" "CMakeFiles/libs.dir/library.c.o.d"
+  "/Users/not_archbtw/dev/c/libs/tree.c" "CMakeFiles/libs.dir/tree.c.o" "gcc" "CMakeFiles/libs.dir/tree.c.o.d"
   )
 
 # Targets to which this target links which contain Fortran sources.

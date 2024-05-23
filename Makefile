@@ -129,29 +129,29 @@ libs/fast:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/libs.dir/build.make CMakeFiles/libs.dir/build
 .PHONY : libs/fast
 
-library.o: library.c.o
-.PHONY : library.o
+tree.o: tree.c.o
+.PHONY : tree.o
 
 # target to build an object file
-library.c.o:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/libs.dir/build.make CMakeFiles/libs.dir/library.c.o
-.PHONY : library.c.o
+tree.c.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/libs.dir/build.make CMakeFiles/libs.dir/tree.c.o
+.PHONY : tree.c.o
 
-library.i: library.c.i
-.PHONY : library.i
+tree.i: tree.c.i
+.PHONY : tree.i
 
 # target to preprocess a source file
-library.c.i:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/libs.dir/build.make CMakeFiles/libs.dir/library.c.i
-.PHONY : library.c.i
+tree.c.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/libs.dir/build.make CMakeFiles/libs.dir/tree.c.i
+.PHONY : tree.c.i
 
-library.s: library.c.s
-.PHONY : library.s
+tree.s: tree.c.s
+.PHONY : tree.s
 
 # target to generate assembly for a file
-library.c.s:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/libs.dir/build.make CMakeFiles/libs.dir/library.c.s
-.PHONY : library.c.s
+tree.c.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/libs.dir/build.make CMakeFiles/libs.dir/tree.c.s
+.PHONY : tree.c.s
 
 # Help Target
 help:
@@ -162,9 +162,9 @@ help:
 	@echo "... edit_cache"
 	@echo "... rebuild_cache"
 	@echo "... libs"
-	@echo "... library.o"
-	@echo "... library.i"
-	@echo "... library.s"
+	@echo "... tree.o"
+	@echo "... tree.i"
+	@echo "... tree.s"
 .PHONY : help
 
 

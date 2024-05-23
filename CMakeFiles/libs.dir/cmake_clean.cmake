@@ -1,6 +1,6 @@
 file(REMOVE_RECURSE
-  "CMakeFiles/libs.dir/library.c.o"
-  "CMakeFiles/libs.dir/library.c.o.d"
+  "CMakeFiles/libs.dir/tree.c.o"
+  "CMakeFiles/libs.dir/tree.c.o.d"
   "liblibs.a"
   "liblibs.pdb"
 )

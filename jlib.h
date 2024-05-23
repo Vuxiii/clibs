@@ -99,6 +99,53 @@ void str_register(const char * _Nonnull format, const Str (* _Nonnull printer)(v
 
 // MARK: - Argument Parser
 
+// MARK: - FileSystem
+
+enum J_FS_WALK_OPTIONS {
+    J_FS_WALK_INCLUDE_FOLDER,
+    J_FS_WALK_INCLUDE_REGULAR,
+    J_FS_WALK_ORDER_LEXICOGRAPHIC, // TODO: William Implement me
+    J_FS_WALK_INCLUDE_DOT, // TODO: William Implement me
+    J_FS_WALK_INCLUDE_DOTDOT, // TODO: William Implement me
+};
+
+typedef struct Path {
+    Str *components;
+} Path;
+
+// Currently only supports directories and files.
+// TODO: William Give this an arena allocator to cleanup the memory easier.
+typedef struct FS_Walker {
+    DIR **current_directory;
+    Path path;
+    u32 options;
+} FS_Walker;
+
+// MARK: - Bit Field
+
+#define j_bit_set(field, bit) ((field) |= (cast(typeof(field), 1) << (bit)))
+#define j_bit_check(field, bit) (!!((field) & (cast(typeof(field), 1) << (bit))))
+// MARK: - Maybe
+
+typedef struct MaybeStr {
+    Str str;
+    bool is_present;
+} MaybeStr;
+
+typedef struct Maybeu32 {
+    u32 value;
+    bool is_present;
+} Maybeu32;
+
+typedef struct MaybeFS_Walker {
+    FS_Walker walker;
+    bool is_present;
+} MaybeFS_Walker;
+
+typedef struct MaybeDirent {
+    struct dirent *dirent;
+    bool is_present;
+} MaybeDirent;
 
 // MARK: - ArrayList New
 
@@ -107,9 +154,9 @@ typedef struct ArrHeader {
     u32 cap;
 } ArrHeader;
 
-#define j_al_header(list) (cast(ArrHeader *, list) - 1)
-#define j_al_len(list) (j_al_header(list)->len)
-#define j_al_cap(list) (j_al_header(list)->cap)
+#define j_al_header(list) ((list) ? cast(ArrHeader *, list) - 1 : NULL)
+#define j_al_len(list) ((list) ? j_al_header(list)->len : 0)
+#define j_al_cap(list) ((list) ? j_al_header(list)->cap : 0)
 #define _j_al_init(list) do\
 {                       \
     if (list == NULL) { \
@@ -131,8 +178,8 @@ typedef struct ArrHeader {
 } while(0)
 #define j_al_append(list, elem) do \
 {                                  \
-    _j_al_init(ints);               \
-    _j_al_realloc(ints);            \
+    _j_al_init(list);               \
+    _j_al_realloc(list);            \
     list[j_al_len(list)] = elem;   \
     j_al_header(list)->len += 1;   \
 } while(0)
@@ -144,6 +191,7 @@ typedef struct ArrHeader {
 } while(0)
 #define j_al_removeLast(list) (j_al_header(list)->len -= 1, list[j_al_len(list)])
 #define j_al_removeFirst(list) (memmove(list, list+1, sizeof(list[0]) * (j_al_len(list)-1)), j_al_header(list)->len -= 1)
+#define j_al_last(list) ((list)[j_al_len(list)-1])
 #define j_al_free(list) (free(j_al_header(list)), list = NULL)
 
 // MARK: - ArrayList
@@ -509,7 +557,7 @@ static void init_printers(void) __attribute__((constructor)) {
     str_register("{str}", str_Printer);
 }
 #endif
-
+// TODO: William Fix me -> There is a bug... {str}{str} prints "correct here{str}"
 static inline const Str str_format_impl(const Str format, va_list args ) {
     ArrayList strs = arraylist_new(sizeof(Str));
     u32 last_printed = 0;
@@ -621,7 +669,8 @@ const Str str_concat(const Str a, const Str b) {
     Str c = {str, len};
     return c;
 }
-
+// TODO: William I should probably copy the string here.
+// Or make another function that copies it for when another owns the string.
 Str str_from_cstr(const char * _Nonnull cstr) {
     Str str = {cstr, 0};
     while (cstr[str.len] != '\0') {
