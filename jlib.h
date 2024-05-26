@@ -105,21 +105,33 @@ enum J_FS_WALK_OPTIONS {
     J_FS_WALK_INCLUDE_FOLDER,
     J_FS_WALK_INCLUDE_REGULAR,
     J_FS_WALK_ORDER_LEXICOGRAPHIC, // TODO: William Implement me
+    J_FS_WALK_COUNT_FOLDER_ENTRIES, // TODO: William Implement me
     J_FS_WALK_INCLUDE_DOT, // TODO: William Implement me
     J_FS_WALK_INCLUDE_DOTDOT, // TODO: William Implement me
 };
 
 typedef struct Path {
-    Str *components;
+    Str  * _Nullable components;
 } Path;
+
+
+typedef struct FS_Dir {
+    DIR * _Nullable dir;
+    i32 remaining_entries;
+} FS_Dir;
 
 // Currently only supports directories and files.
 // TODO: William Give this an arena allocator to cleanup the memory easier.
 typedef struct FS_Walker {
-    DIR **current_directory;
+    FS_Dir * _Nullable open_directories;
     Path path;
     u32 options;
 } FS_Walker;
+
+typedef struct FS_Entry {
+    bool is_last;
+    struct dirent *dirent;
+} FS_Entry;
 
 // MARK: - Bit Field
 
@@ -142,10 +154,10 @@ typedef struct MaybeFS_Walker {
     bool is_present;
 } MaybeFS_Walker;
 
-typedef struct MaybeDirent {
-    struct dirent *dirent;
+typedef struct MaybeFS_Entry {
+    FS_Entry entry;
     bool is_present;
-} MaybeDirent;
+} MaybeFS_Entry;
 
 // MARK: - ArrayList New
 
@@ -171,7 +183,7 @@ typedef struct ArrHeader {
 {                             \
     if(j_al_len(list) == j_al_cap(list)) { \
         void *p = realloc(j_al_header(list), _j_al_realloc_new_size(list)); \
-        assert(("Failed to realloc\n", p)); \
+        jassert(p, "Failed to realloc\n"); \
         list = p + sizeof(ArrHeader);      \
         j_al_header(list)->cap *= 2;       \
     }                          \
@@ -180,7 +192,7 @@ typedef struct ArrHeader {
 {                                  \
     _j_al_init(list);               \
     _j_al_realloc(list);            \
-    list[j_al_len(list)] = elem;   \
+    list[j_al_len(list)] = (elem);   \
     j_al_header(list)->len += 1;   \
 } while(0)
 #define j_al_swap(list, i, j) do \
