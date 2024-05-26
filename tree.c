@@ -207,12 +207,12 @@ MaybeFS_Entry j_fs_walk_next(FS_Walker *walker) {
             // Go one folder up...
             j_fs_path_pop(&walker->path);
 
-            // TODO: William Check if this is correct...
-            j_al_last(walker->open_directories).remaining_entries--;
 
             if (j_al_len(walker->open_directories) == 0) {
                 return (MaybeFS_Entry ) {.is_present = false};
             }
+            // TODO: William Check if this is correct...
+            j_al_last(walker->open_directories).remaining_entries--;
             continue;
         }
 //        print("Looking at Entry: {str}\n", str_from_cstr(dir->d_name));
