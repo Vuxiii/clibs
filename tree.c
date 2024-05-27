@@ -99,6 +99,11 @@ struct MaybeFS_Entry j_fs_walk_next(FS_Walker *walker);
 
 void j_fs_path_push(Path *path, Str entry);
 MaybeStr j_fs_path_pop(Path *path);
+/**
+ * Builds the path from the components separated by '/'
+ * @param path The path
+ * @return nil if the path is empty
+ */
 MaybeStr j_fs_path_build(Path *path);
 
 void j_fs_path_push(Path *path, Str entry) {
@@ -112,7 +117,7 @@ MaybeStr j_fs_path_pop(Path *path) {
     return (MaybeStr) { .str = j_al_removeLast(path->components), .is_present = true };
 }
 
-MaybeStr j_fs_path_build(Path *path) {
+MaybeStr j_fs_path_build(Path *path) { //TODO: William Add an arena here.
     u32 len = j_al_len(path->components) - 1; // The amount of slashes needed.
     if (len == -1) {
         return (MaybeStr) { .is_present = false };
@@ -127,13 +132,11 @@ MaybeStr j_fs_path_build(Path *path) {
     }
     Str result = (Str) { .str = buffer, .len = len };
 
-    for (u32 i = 0; i < j_al_len(path->components); ++i) {
+    for (u32 i = 0; i < j_al_len(path->components); ++i, ++buffer) {
         memmove(buffer, path->components[i].str, path->components[i].len);
         buffer += path->components[i].len;
         buffer[0] = '/';
-        buffer++;
     }
-    --buffer;
     buffer[0] = '\0';
     return (MaybeStr) { .str = result, .is_present = true };
 }
