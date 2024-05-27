@@ -166,12 +166,12 @@ typedef struct ArrHeader {
     u32 cap;
 } ArrHeader;
 
-#define j_al_header(list) ((list) ? cast(ArrHeader *, list) - 1 : NULL)
+#define j_al_header(list) ((list) ? cast(ArrHeader *, list) - 1 : EMPTY_ARRAY)
 #define j_al_len(list) ((list) ? j_al_header(list)->len : 0)
 #define j_al_cap(list) ((list) ? j_al_header(list)->cap : 0)
 #define _j_al_init(list) do\
 {                       \
-    if (list == NULL) { \
+    if (list == EMPTY_ARRAY) { \
         list = malloc(10 * sizeof(list[0]) + sizeof(ArrHeader)) + sizeof(ArrHeader); \
         j_al_header(list)->len = 0;      \
         j_al_header(list)->cap = 10;      \
@@ -184,7 +184,7 @@ typedef struct ArrHeader {
     if(j_al_len(list) == j_al_cap(list)) { \
         void *p = realloc(j_al_header(list), _j_al_realloc_new_size(list)); \
         jassert(p, "Failed to realloc\n"); \
-        list = p + sizeof(ArrHeader);      \
+        (list) = p + sizeof(ArrHeader);      \
         j_al_header(list)->cap *= 2;       \
     }                          \
 } while(0)

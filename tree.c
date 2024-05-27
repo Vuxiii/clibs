@@ -33,10 +33,10 @@ ArgParser j_parser_init(char *program, char *program_description, int argc, char
             .program_description = str_from_cstr(program_description),
             ._argc = argc,
             ._argv = argv,
-            .args = NULL,
-            .flags = NULL,
-            .alternates = NULL,
-            .descriptions = NULL,
+            .args = EMPTY_ARRAY,
+            .flags = EMPTY_ARRAY,
+            .alternates = EMPTY_ARRAY,
+            .descriptions = EMPTY_ARRAY,
     };
 }
 
@@ -143,8 +143,8 @@ MaybeStr j_fs_path_build(Path *path) { //TODO: William Add an arena here.
 
 MaybeFS_Walker j_fs_walk(Str path, u32 options) {
     FS_Walker walker = {
-            .open_directories = NULL,
-            .path = NULL,
+            .open_directories = EMPTY_ARRAY,
+            .path = { .components = EMPTY_ARRAY },
             .options = options,
     };
     if (j_fs_walk_open_folder(&walker, path) == false) {
@@ -241,7 +241,7 @@ MaybeFS_Entry j_fs_walk_next(FS_Walker *walker) {
         }
     } while (dir == NULL);
     i32 remaining = walker->open_directories[parent_index].remaining_entries;
-    return (MaybeFS_Entry) { .is_present = true, .entry = { .dirent = dir, .is_last = remaining == 0 } }; // Ehh
+    return (MaybeFS_Entry) { .is_present = true, .entry = { .dirent = dir, .is_last = remaining == 0 } };
 }
 
 void print_current_prefix(Str *prefix) {
@@ -324,8 +324,8 @@ int main(int argc, char **argv) {
 
     Str dot = str_from_cstr(".");
     Str dotdot = str_from_cstr("..");
-//    MaybeFS_Walker mwalker = j_fs_walk(dot, walk_options);
-    MaybeFS_Walker mwalker = j_fs_walk(str_from_cstr("./.git/logs"), walk_options);
+    MaybeFS_Walker mwalker = j_fs_walk(dot, walk_options);
+//    MaybeFS_Walker mwalker = j_fs_walk(str_from_cstr("./.git/logs"), walk_options);
     if (mwalker.is_present == false) {
         print("Path does not exist\n");
         exit(1);
@@ -333,23 +333,12 @@ int main(int argc, char **argv) {
 
     FS_Walker walker = mwalker.walker;
 
-//    {
-//        struct MaybeFS_Entry m;
-//        while ((m = j_fs_walk_next(&walker)).is_present) {
-//            struct dirent *dirent = m.entry.dirent;
-//            Str name = str_from_cstr(dirent->d_name);
-//            print("{str}\tremaining: {i32} {str}\n", name, j_al_last(walker.open_directories).remaining_entries,
-//                  j_fs_path_build(&walker.path).str);
-//
-//        }
-//    }
-//    exit(1);
     Str T     = str_from_cstr("├── ");
     Str pipe  = str_from_cstr("│   ");
     Str end   = str_from_cstr("└── ");
     Str space = str_from_cstr("    ");
 
-    Str *prefix = NULL;
+    Str *prefix = EMPTY_ARRAY;
     bool first_iter = true;
     struct dirent current_entry = {0};
     bool current_entry_is_last = false;
@@ -397,23 +386,18 @@ int main(int argc, char **argv) {
             } else {
                 j_al_append(prefix, T);
             }
-        } else if (peek_depth < current_depth) {
-            for (u32 i = 0; i < current_depth - peek_depth; ++i) {
-                j_al_removeLast(prefix);
-            }
-            if (peek_entry.entry.is_last) {
-                j_al_last(prefix) = end;
-            } else {
-                j_al_last(prefix) = T;
-            }
         } else {
+            if (peek_depth < current_depth) {
+                for (u32 i = 0; i < current_depth - peek_depth; ++i) {
+                    j_al_removeLast(prefix);
+                }
+            }
             if (peek_entry.entry.is_last) {
                 j_al_last(prefix) = end;
             } else {
                 j_al_last(prefix) = T;
             }
         }
-
         current_entry_is_last = peek_entry.entry.is_last;
         current_entry = *peek_entry.entry.dirent;
         current_depth = j_al_len(walker.path.components);
