@@ -130,7 +130,7 @@ typedef struct FS_Walker {
 
 typedef struct FS_Entry {
     bool is_last;
-    struct dirent *dirent;
+    struct dirent * _Nullable dirent;
 } FS_Entry;
 
 // MARK: - Bit Field

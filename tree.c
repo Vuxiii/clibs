@@ -215,7 +215,7 @@ MaybeFS_Entry j_fs_walk_next(FS_Walker *walker) {
             j_al_last(walker->open_directories).remaining_entries--;
             continue;
         }
-//        print("Looking at Entry: {str}\n", str_from_cstr(dir->d_name));
+        print("Looking at Entry: {str}\n", str_from_cstr(dir->d_name));
         if (dir->d_type == DT_DIR) {
             if (j_bit_check(walker->options, J_FS_WALK_INCLUDE_FOLDER) == false) {
                 dir = NULL;
@@ -320,7 +320,8 @@ int main(int argc, char **argv) {
 
     Str dot = str_from_cstr(".");
     Str dotdot = str_from_cstr("..");
-    MaybeFS_Walker mwalker = j_fs_walk(dot, walk_options);
+//    MaybeFS_Walker mwalker = j_fs_walk(dot, walk_options);
+    MaybeFS_Walker mwalker = j_fs_walk(str_from_cstr("./.git/logs"), walk_options);
     if (mwalker.is_present == false) {
         print("Path does not exist\n");
         exit(1);
@@ -329,48 +330,46 @@ int main(int argc, char **argv) {
     FS_Walker walker = mwalker.walker;
 
 //    {
-//        struct MaybeDirent m;
+//        struct MaybeFS_Entry m;
 //        while ((m = j_fs_walk_next(&walker)).is_present) {
-//            struct dirent *dirent = m.dirent;
+//            struct dirent *dirent = m.entry.dirent;
 //            Str name = str_from_cstr(dirent->d_name);
-//            print("{str}\tremaining: {i32}\n", name, j_al_last(walker.open_directories).remaining_entries);
+//            print("{str}\tremaining: {i32} {str}\n", name, j_al_last(walker.open_directories).remaining_entries,
+//                  j_fs_path_build(&walker.path).str);
 //
 //        }
 //    }
 //    exit(1);
-    Str T = str_from_cstr("├──");
-    Str pipe = str_from_cstr("│   ");
-    Str end = str_from_cstr("└──");
+    Str T     = str_from_cstr("├── ");
+    Str pipe  = str_from_cstr("│   ");
+    Str end   = str_from_cstr("└── ");
     Str space = str_from_cstr("    ");
 
     Str *prefix = NULL;
 
-    j_al_append(prefix, T);
     MaybeFS_Entry current_entry = {0};
     MaybeFS_Entry peek_entry = {0};
     u32 current_depth = 0;
-    Str current_path = str_from_cstr(".");
-    i32 current_remaining_entries = 0;
-    print_current_prefix(prefix);
     while ((peek_entry = j_fs_walk_next(&walker)).is_present) {
         MaybeStr m = j_fs_path_build(&walker.path);
         if (current_entry.is_present == false) {
             current_entry = peek_entry;
-            current_path = m.str;
             current_depth = j_al_len(walker.path.components);
-            current_remaining_entries = j_al_last(walker.open_directories).remaining_entries;
+
+            if (peek_entry.entry.is_last) {
+                j_al_append(prefix, end);
+            } else {
+                j_al_append(prefix, T);
+            }
             continue;
         }
-        Str peek_path = m.str;
 
         u32 peek_depth = j_al_len(walker.path.components);
-        i32 peek_remaining_entries = j_al_last(walker.open_directories).remaining_entries;
-        current_remaining_entries = peek_remaining_entries;
-
-
         struct dirent *dirent = current_entry.entry.dirent;
         Str entry_name = str_from_cstr(dirent->d_name);
-        print(" {str} current_is_last: {bool} peek_is_last {bool} entries remaining: {i32}\n", entry_name, current_entry.entry.is_last, peek_entry.entry.is_last, current_remaining_entries);
+
+        print_current_prefix(prefix);
+        print("{str} [{str}|{str}]\n", entry_name, str_from_cstr(current_entry.entry.dirent->d_name), str_from_cstr(peek_entry.entry.dirent->d_name));
         // Don't forget to add the regular files to the path......
         if (peek_entry.entry.dirent->d_type == DT_REG) {
             peek_depth++;
@@ -408,10 +407,10 @@ int main(int argc, char **argv) {
             }
         }
 
-        print_current_prefix(prefix);
-        current_path = m.str;
         current_entry = peek_entry;
-        current_depth = j_al_len(walker.path.components) ;
+        current_depth = j_al_len(walker.path.components);
     }
+    print_current_prefix(prefix);
+    print("{str}\n", str_from_cstr(current_entry.entry.dirent->d_name));
     return 0;
 }
