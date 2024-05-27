@@ -91,6 +91,7 @@ MaybeFS_Walker j_fs_walk(Str path, u32 options);
 bool j_fs_walk_open_folder(FS_Walker *walker, Str folder);
 /**
  * Get the next file in the walk
+ * The FS_Entry is only valid until the next call to this function. So copy it if you need it after.
  * @param walker The Walker
  * @return nil if there are no more files
  */
@@ -215,7 +216,7 @@ MaybeFS_Entry j_fs_walk_next(FS_Walker *walker) {
             j_al_last(walker->open_directories).remaining_entries--;
             continue;
         }
-        print("Looking at Entry: {str}\n", str_from_cstr(dir->d_name));
+//        print("Looking at Entry: {str}\n", str_from_cstr(dir->d_name));
         if (dir->d_type == DT_DIR) {
             if (j_bit_check(walker->options, J_FS_WALK_INCLUDE_FOLDER) == false) {
                 dir = NULL;
@@ -346,15 +347,18 @@ int main(int argc, char **argv) {
     Str space = str_from_cstr("    ");
 
     Str *prefix = NULL;
-
-    MaybeFS_Entry current_entry = {0};
+    bool first_iter = true;
+    struct dirent current_entry = {0};
+    bool current_entry_is_last = false;
     MaybeFS_Entry peek_entry = {0};
     u32 current_depth = 0;
     while ((peek_entry = j_fs_walk_next(&walker)).is_present) {
         MaybeStr m = j_fs_path_build(&walker.path);
-        if (current_entry.is_present == false) {
-            current_entry = peek_entry;
+        if (first_iter) {
+            first_iter = false;
+            current_entry = *peek_entry.entry.dirent;
             current_depth = j_al_len(walker.path.components);
+            current_entry_is_last = peek_entry.entry.is_last;
 
             if (peek_entry.entry.is_last) {
                 j_al_append(prefix, end);
@@ -365,22 +369,22 @@ int main(int argc, char **argv) {
         }
 
         u32 peek_depth = j_al_len(walker.path.components);
-        struct dirent *dirent = current_entry.entry.dirent;
-        Str entry_name = str_from_cstr(dirent->d_name);
+
+        Str entry_name = str_from_cstr(current_entry.d_name);
 
         print_current_prefix(prefix);
-        print("{str} [{str}|{str}]\n", entry_name, str_from_cstr(current_entry.entry.dirent->d_name), str_from_cstr(peek_entry.entry.dirent->d_name));
+        print("{str}\n", entry_name);
         // Don't forget to add the regular files to the path......
         if (peek_entry.entry.dirent->d_type == DT_REG) {
             peek_depth++;
         }
-        if (current_entry.entry.dirent->d_type == DT_REG) {
+        if (current_entry.d_type == DT_REG) {
             current_depth++;
         }
 
         if (peek_depth > current_depth) {
             // Because we are going a step deeper, we have to update the current prefix.
-            if (current_entry.entry.is_last) {
+            if (current_entry_is_last) {
                 j_al_last(prefix) = space;
             } else {
                 j_al_last(prefix) = pipe;
@@ -407,10 +411,11 @@ int main(int argc, char **argv) {
             }
         }
 
-        current_entry = peek_entry;
+        current_entry_is_last = peek_entry.entry.is_last;
+        current_entry = *peek_entry.entry.dirent;
         current_depth = j_al_len(walker.path.components);
     }
     print_current_prefix(prefix);
-    print("{str}\n", str_from_cstr(current_entry.entry.dirent->d_name));
+    print("{str}\n", str_from_cstr(current_entry.d_name));
     return 0;
 }

@@ -114,7 +114,6 @@ typedef struct Path {
     Str  * _Nullable components;
 } Path;
 
-
 typedef struct FS_Dir {
     DIR * _Nullable dir;
     i32 remaining_entries;
@@ -160,6 +159,7 @@ typedef struct MaybeFS_Entry {
 } MaybeFS_Entry;
 
 // MARK: - ArrayList New
+#define EMPTY_ARRAY NULL
 
 typedef struct ArrHeader {
     u32 len;
