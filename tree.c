@@ -13,10 +13,10 @@ typedef struct ArgParser {
     int _argc;
     char **_argv;
 
-    Str *args;
-    Str *flags;
-    Str *alternates;
-    Str *descriptions;
+    j_list(Str) args;
+    j_list(Str) flags;
+    j_list(Str) alternates;
+    j_list(Str) descriptions;
 } ArgParser;
 
 
@@ -24,8 +24,8 @@ ArgParser j_parser_init(char *program, char *program_description, int argc, char
 void j_arg_usage(ArgParser *parser, char *program);
 u32 j_arg_option(ArgParser *parser, char *flag, char *alternate, char *description);
 bool j_arg_has_next(ArgParser *parser);
-Maybeu32 j_arg_get_flag(ArgParser *parser);
-MaybeStr j_arg_current_input(ArgParser *parser);
+j_maybe(u32) j_arg_get_flag(ArgParser *parser);
+j_maybe(Str) j_arg_current_input(ArgParser *parser);
 
 ArgParser j_parser_init(char *program, char *program_description, int argc, char **argv) {
     return (ArgParser) {
@@ -54,23 +54,23 @@ bool j_arg_has_next(ArgParser *parser) {
     return parser->_argc > 1;
 }
 
-Maybeu32 j_arg_get_flag(ArgParser *parser) {
+j_maybe(u32) j_arg_get_flag(ArgParser *parser) {
     Str flag = str_from_cstr(parser->_argv[parser->_argc - 1]);
     // Check if we have the flag registered..
     for (u32 i = 0; i < j_al_len(parser->flags); ++i) {
         if (str_eq(flag, parser->flags[i]) || str_eq(flag, parser->alternates[i])) {
             parser->_argc--;
-            return (Maybeu32) { .value = i, .is_present = true };
+            return (j_maybe(u32)) { .value = i, .is_present = true };
         }
     }
-    return (Maybeu32) { .is_present = false};
+    return (j_maybe(u32)) { .is_present = false};
 }
 
-MaybeStr j_arg_current_input(ArgParser *parser) {
+j_maybe(Str) j_arg_current_input(ArgParser *parser) {
     if (parser->_argc > 1) {
-        return (MaybeStr) { .str = str_from_cstr(parser->_argv[parser->_argc - 1]), .is_present = true };
+        return (j_maybe(Str)) { .value = str_from_cstr(parser->_argv[parser->_argc - 1]), .is_present = true };
     }
-    return (MaybeStr) { .is_present = false };
+    return (j_maybe(Str)) { .is_present = false };
 }
 
 
@@ -81,7 +81,7 @@ MaybeStr j_arg_current_input(ArgParser *parser) {
  * @param options The options for the walker
  * @return nil if the path does not exist
  */
-MaybeFS_Walker j_fs_walk(Str path, u32 options);
+j_maybe(FS_Walker) j_fs_walk(Str path, u32 options);
 /**
  * Open a folder in the walk
  * @param walker The Walker
@@ -95,32 +95,32 @@ bool j_fs_walk_open_folder(FS_Walker *walker, Str folder);
  * @param walker The Walker
  * @return nil if there are no more files
  */
-struct MaybeFS_Entry j_fs_walk_next(FS_Walker *walker);
+struct j_maybe(FS_Entry) j_fs_walk_next(FS_Walker *walker);
 
 void j_fs_path_push(Path *path, Str entry);
-MaybeStr j_fs_path_pop(Path *path);
+j_maybe(Str) j_fs_path_pop(Path *path);
 /**
  * Builds the path from the components separated by '/'
  * @param path The path
  * @return nil if the path is empty
  */
-MaybeStr j_fs_path_build(Path *path);
+j_maybe(Str) j_fs_path_build(Path *path);
 
 void j_fs_path_push(Path *path, Str entry) {
     j_al_append(path->components, entry);
 }
 
-MaybeStr j_fs_path_pop(Path *path) {
+j_maybe(Str) j_fs_path_pop(Path *path) {
     if (j_al_len(path->components) == 0) {
-        return (MaybeStr) { .is_present = false };
+        return (j_maybe(Str)) { .is_present = false };
     }
-    return (MaybeStr) { .str = j_al_removeLast(path->components), .is_present = true };
+    return (j_maybe(Str)) { .value = j_al_removeLast(path->components), .is_present = true };
 }
 
-MaybeStr j_fs_path_build(Path *path) { //TODO: William Add an arena here.
+j_maybe(Str) j_fs_path_build(Path *path) { //TODO: William Add an arena here.
     u32 len = j_al_len(path->components) - 1; // The amount of slashes needed.
     if (len == -1) {
-        return (MaybeStr) { .is_present = false };
+        return (j_maybe(Str)) { .is_present = false };
     }
     for (u32 i = 0; i < j_al_len(path->components); ++i) {
         len += path->components[i].len;
@@ -128,7 +128,7 @@ MaybeStr j_fs_path_build(Path *path) { //TODO: William Add an arena here.
 
     char *buffer = malloc(len + 1);
     if (buffer == NULL) {
-        return (MaybeStr) { .is_present = false };
+        return (j_maybe(Str)) { .is_present = false };
     }
     Str result = (Str) { .str = buffer, .len = len };
 
@@ -138,29 +138,29 @@ MaybeStr j_fs_path_build(Path *path) { //TODO: William Add an arena here.
         buffer[0] = '/';
     }
     buffer[0] = '\0';
-    return (MaybeStr) { .str = result, .is_present = true };
+    return (j_maybe(Str)) { .value = result, .is_present = true };
 }
 
-MaybeFS_Walker j_fs_walk(Str path, u32 options) {
+j_maybe(FS_Walker) j_fs_walk(Str path, u32 options) {
     FS_Walker walker = {
             .open_directories = EMPTY_ARRAY,
             .path = { .components = EMPTY_ARRAY },
             .options = options,
     };
     if (j_fs_walk_open_folder(&walker, path) == false) {
-        return (MaybeFS_Walker) { .is_present = false };
+        return (j_maybe(FS_Walker)) { .is_present = false };
     }
-    return (MaybeFS_Walker) { .walker = walker, .is_present = true };
+    return (j_maybe(FS_Walker)) { .value = walker, .is_present = true };
 }
 
 bool j_fs_walk_open_folder(FS_Walker *walker, Str folder) {
     j_fs_path_push(&walker->path, folder);
-    MaybeStr mStr = j_fs_path_build(&walker->path);
+    j_maybe(Str) mStr = j_fs_path_build(&walker->path);
     if (mStr.is_present == false) {
         j_fs_path_pop(&walker->path);
         return false;
     }
-    Str path = mStr.str;
+    Str path = mStr.value;
     DIR *dir = opendir(path.str);
     if (dir == NULL) {
         j_fs_path_pop(&walker->path);
@@ -194,7 +194,7 @@ bool j_fs_walk_open_folder(FS_Walker *walker, Str folder) {
     return true;
 }
 
-MaybeFS_Entry j_fs_walk_next(FS_Walker *walker) {
+j_maybe(FS_Entry) j_fs_walk_next(FS_Walker *walker) {
     struct dirent *dir = NULL;
     jassert(j_al_len(walker->open_directories) > 0, "Precondition: When calling this method the walker must have a folder open.\n");
     if (j_bit_check(walker->options, J_FS_WALK_COUNT_FOLDER_ENTRIES)) {
@@ -211,15 +211,13 @@ MaybeFS_Entry j_fs_walk_next(FS_Walker *walker) {
             // Go one folder up...
             j_fs_path_pop(&walker->path);
 
-
             if (j_al_len(walker->open_directories) == 0) {
-                return (MaybeFS_Entry ) {.is_present = false};
+                return (j_maybe(FS_Entry) ) {.is_present = false};
             }
             // TODO: William Check if this is correct...
             j_al_last(walker->open_directories).remaining_entries--;
             continue;
         }
-//        print("Looking at Entry: {str}\n", str_from_cstr(dir->d_name));
         if (dir->d_type == DT_DIR) {
             if (j_bit_check(walker->options, J_FS_WALK_INCLUDE_FOLDER) == false) {
                 dir = NULL;
@@ -241,15 +239,16 @@ MaybeFS_Entry j_fs_walk_next(FS_Walker *walker) {
         }
     } while (dir == NULL);
     i32 remaining = walker->open_directories[parent_index].remaining_entries;
-    return (MaybeFS_Entry) { .is_present = true, .entry = { .dirent = dir, .is_last = remaining == 0 } };
+    return (j_maybe(FS_Entry)) { .is_present = true, .value = { .dirent = dir, .is_last = remaining == 0 } };
 }
 
-void print_current_prefix(Str *prefix) {
-    for (u32 i = 0; i < j_al_len(prefix); ++i) {
-        print("{str}", prefix[i]);
-    }
-}
 
+
+/**
+ * Concatenates the strings into one string
+ * @param strings The strings to concatenate
+ * @return The concatenated string
+ */
 Str build_str(Str *strings) {
     u32 len = 0;
     for (u32 i = 0; i < j_al_len(strings); ++i) {
@@ -266,7 +265,200 @@ Str build_str(Str *strings) {
     return result;
 }
 
+void print_a(int *a) {
+    print("[");
+    for (int i = 0; i < j_al_len(a); ++i) {
+        if (i != 0) {
+            print(", ");
+        }
+        print("{i32}", a[i]);
+    }
+    print("]\n");
+}
+
+void print_a_len(int *a) {
+    print("{u32}\n", j_al_len(a));
+}
+
+typedef struct Regex_Token {
+    i32 c: 8;           // Some character
+    u32 is_wildcard: 1; // .
+    u32 is_optional: 1; // ?
+    u32 is_plus: 1;     // +
+    u32 is_star: 1;     // *
+    u32 is_union: 1;    // |
+    u32 is_digit: 1;    // \d [:digit:] [0-9]
+    u32 is_alpha: 1;    // \w [:alpha:] [a-zA-Z]
+    u32 is_alnum: 1;    //    [:alnum:] [a-zA-Z0-9]
+    u32 is_space: 1;    // \s [:space:] [ \t\n\r\f\v]
+    u32 is_lower: 1;    // \l [:lower:] [a-z]
+    u32 is_upper: 1;    // \u [:upper:] [A-Z]
+} Regex_Token;
+
+typedef struct MaybeRegex_Token_Array {
+    j_list(Regex_Token) tokens;
+    bool is_present;
+} MaybeRegex_Token_Array;
+
+typedef struct Regex {
+    j_list(Regex_Token) states;
+    j_list(j_pair(u32, u32)) transitions;
+    j_list(u32) accepting_states;
+    u32 start_state;
+    u32 current_state;
+} Regex;
+
+_j_stamp_maybe(Regex);
+
+j_maybe(Regex) j_regex(Str pattern);
+j_maybe(Regex_Token_Array) j_regex_tokenize(Str pattern);
+bool j_regex_tokenize_next(j_list(Regex_Token) *tokens, Str_View *pattern);
+
+bool j_regex_tokenize_next(j_list(Regex_Token) *tokenss, Str_View *pattern) {
+    if (j_str_view_has_next(pattern) == false) {
+        return false;
+    }
+    j_list(Regex_Token) tokens = *tokenss;
+    if (j_str_view_eq_cstr(pattern, ".")) {
+        j_al_append(tokens, (Regex_Token) {.is_wildcard = true});
+    } else if (j_str_view_eq_cstr(pattern, "|")) {
+        j_al_append(tokens, (Regex_Token) {.is_union = true});
+    } else if (j_str_view_eq_cstr(pattern, "*")) {
+        j_al_append(tokens, (Regex_Token) {.is_star = true});
+    } else if (j_str_view_eq_cstr(pattern, "+")) {
+        j_al_append(tokens, (Regex_Token) {.is_plus = true});
+    } else if (j_str_view_eq_cstr(pattern, "?")) {
+        j_al_append(tokens, (Regex_Token) {.is_optional = true});
+    } else if (j_str_view_eq_cstr(pattern, "\\")) {
+        j_str_view_set_width(pattern, 2);
+        if (j_str_view_eq_cstr(pattern, "\\d")) {
+            j_al_append(tokens, (Regex_Token) {.is_digit = true});
+        } else if (j_str_view_eq_cstr(pattern, "\\w")) {
+            j_al_append(tokens, (Regex_Token) {.is_alpha = true});
+        } else if (j_str_view_eq_cstr(pattern, "\\s")) {
+            j_al_append(tokens, (Regex_Token) {.is_space = true});
+        } else if (j_str_view_eq_cstr(pattern, "\\l")) {
+            j_al_append(tokens, (Regex_Token) {.is_lower = true});
+        } else if (j_str_view_eq_cstr(pattern, "\\u")) {
+            j_al_append(tokens, (Regex_Token) {.is_upper = true});
+        } else if (j_str_view_eq_cstr(pattern, "\\.")) {
+            j_al_append(tokens, (Regex_Token) {.c = '.'});
+        } else if (j_str_view_eq_cstr(pattern, "\\|")) {
+            j_al_append(tokens, (Regex_Token) {.c = '|'});
+        } else if (j_str_view_eq_cstr(pattern, "\\*")) {
+            j_al_append(tokens, (Regex_Token) {.c = '*'});
+        } else if (j_str_view_eq_cstr(pattern, "\\+")) {
+            j_al_append(tokens, (Regex_Token) {.c = '+'});
+        } else if (j_str_view_eq_cstr(pattern, "\\?")) {
+            j_al_append(tokens, (Regex_Token) {.c = '?'});
+        } else {
+            jassert(false, "Unknown escape sequence\n");
+        }
+        j_str_view_next(pattern);
+        j_str_view_set_width(pattern, 1);
+    } else {
+        char c = j_str_view_current(pattern)->str[0];
+        j_al_append(tokens, (Regex_Token) {.c = c });
+    }
+    j_str_view_next(pattern);
+    *tokenss = tokens;
+    return true;
+}
+
+j_maybe(Regex_Token_Array) j_regex_tokenize(Str pattern) {
+    j_list(Regex_Token) tokens = EMPTY_ARRAY;
+
+    Str_View view = str_view(&pattern);
+
+    j_str_view_set_width(&view, 1);
+    bool success = false;
+
+    while ((success = j_regex_tokenize_next(&tokens, &view)) == true) {
+        //TODO: William Make a lazy here version...
+    }
+
+    if (j_al_len(tokens) == 0) {
+        return (j_maybe(Regex_Token_Array)) { .is_present = false };
+    }
+
+    return (j_maybe(Regex_Token_Array)) { .tokens = tokens, .is_present = true };
+}
+
+MaybeRegex j_regex(Str pattern) {
+
+    //TODO: William Fix this macro text subst....
+    j_maybe(j_list(Regex_Token)) mtokar = j_regex_tokenize(pattern);
+
+//    return (MaybeRegex) { .is_present = false };
+}
+
 int main(int argc, char **argv) {
+
+
+    j_maybe(Regex) mregex = j_regex(str_from_cstr("H .E | L + L O \\d \\w \\s \\l \\u . *"));
+
+    if (mregex.is_present == false) {
+        print("Failed to parse regex\n");
+        return 1;
+    }
+    Regex regex = mregex.value;
+//    assert(j_al_len(regex.states) == 2);
+//    assert(regex.states[0].is_wildcard == 1);
+
+    for (u32 i = 0; i < j_al_len(regex.states); ++i) {
+        if (regex.states[i].is_wildcard == 1) {
+            print(".");
+        } else if (regex.states[i].is_union) {
+            print("|");
+        } else if (regex.states[i].is_star) {
+            print("*");
+        } else if (regex.states[i].is_plus) {
+            print("+");
+        } else if (regex.states[i].is_optional) {
+            print("?");
+        } else if (regex.states[i].is_digit) {
+            print("\\d");
+        } else if (regex.states[i].is_alpha) {
+            print("\\w");
+        } else if (regex.states[i].is_space) {
+            print("\\s");
+        } else if (regex.states[i].is_lower) {
+            print("\\l");
+        } else if (regex.states[i].is_upper) {
+            print("\\u");
+        } else {
+            char c = (char)regex.states[i].c;
+            print("{str}", (Str) { .str = &c, .len = 1 });
+        }
+    }
+
+    return 0;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+void print_current_prefix(Str *prefix) {
+    for (u32 i = 0; i < j_al_len(prefix); ++i) {
+        print("{str}", prefix[i]);
+    }
+}
+
+int tree(int argc, char **argv) {
     char *program = argv[0];
 
     ArgParser parser = j_parser_init(program,
@@ -284,7 +476,7 @@ int main(int argc, char **argv) {
 
     u32 options = 0;
     while (j_arg_has_next(&parser)) {
-        Maybeu32 flag = j_arg_get_flag(&parser);
+        j_maybe(u32) flag = j_arg_get_flag(&parser);
         if (flag.is_present){
             print("Flag: {str}\n", parser.flags[flag.value]);
             if (flag.value == HELP_FLAG) {
@@ -293,9 +485,9 @@ int main(int argc, char **argv) {
             }
             j_bit_set(options, flag.value);
         } else {
-            MaybeStr input = j_arg_current_input(&parser);
+            j_maybe(Str) input = j_arg_current_input(&parser);
             if (input.is_present) {
-                print("Unknown flag: {str}\n", input.str);
+                print("Unknown flag: {str}\n", input.value);
                 exit(1);
             } else {
                 print("No more flags...\n");
@@ -310,12 +502,12 @@ int main(int argc, char **argv) {
     print("\n------------------\n");
 
     u32 walk_options = 0;
-//    if (j_bit_check(options, INCLUDE_FOLDER_FLAG)) {
+    if (j_bit_check(options, INCLUDE_FOLDER_FLAG)) {
         j_bit_set(walk_options, J_FS_WALK_INCLUDE_FOLDER);
-//    }
-//    if (j_bit_check(options, INCLUDE_FILE_FLAG)) {
+    }
+    if (j_bit_check(options, INCLUDE_FILE_FLAG)) {
         j_bit_set(walk_options, J_FS_WALK_INCLUDE_REGULAR);
-//    }
+    }
     if (j_bit_check(options, LEXICOGRAPHIC_FLAG)) {
         j_bit_set(walk_options, J_FS_WALK_ORDER_LEXICOGRAPHIC);
     }
@@ -324,14 +516,13 @@ int main(int argc, char **argv) {
 
     Str dot = str_from_cstr(".");
     Str dotdot = str_from_cstr("..");
-    MaybeFS_Walker mwalker = j_fs_walk(dot, walk_options);
-//    MaybeFS_Walker mwalker = j_fs_walk(str_from_cstr("./.git/logs"), walk_options);
+    j_maybe(FS_Walker) mwalker = j_fs_walk(dot, walk_options);
     if (mwalker.is_present == false) {
         print("Path does not exist\n");
         exit(1);
     }
 
-    FS_Walker walker = mwalker.walker;
+    FS_Walker walker = mwalker.value;
 
     Str T     = str_from_cstr("├── ");
     Str pipe  = str_from_cstr("│   ");
@@ -342,17 +533,17 @@ int main(int argc, char **argv) {
     bool first_iter = true;
     struct dirent current_entry = {0};
     bool current_entry_is_last = false;
-    MaybeFS_Entry peek_entry = {0};
+    j_maybe(FS_Entry) peek_entry = {0};
     u32 current_depth = 0;
     while ((peek_entry = j_fs_walk_next(&walker)).is_present) {
-        MaybeStr m = j_fs_path_build(&walker.path);
+        j_maybe(Str) m = j_fs_path_build(&walker.path);
         if (first_iter) {
             first_iter = false;
-            current_entry = *peek_entry.entry.dirent;
+            current_entry = *peek_entry.value.dirent;
             current_depth = j_al_len(walker.path.components);
-            current_entry_is_last = peek_entry.entry.is_last;
+            current_entry_is_last = peek_entry.value.is_last;
 
-            if (peek_entry.entry.is_last) {
+            if (peek_entry.value.is_last) {
                 j_al_append(prefix, end);
             } else {
                 j_al_append(prefix, T);
@@ -367,7 +558,7 @@ int main(int argc, char **argv) {
         print_current_prefix(prefix);
         print("{str}\n", entry_name);
         // Don't forget to add the regular files to the path......
-        if (peek_entry.entry.dirent->d_type == DT_REG) {
+        if (peek_entry.value.dirent->d_type == DT_REG) {
             peek_depth++;
         }
         if (current_entry.d_type == DT_REG) {
@@ -381,7 +572,7 @@ int main(int argc, char **argv) {
             } else {
                 j_al_last(prefix) = pipe;
             }
-            if (peek_entry.entry.is_last) {
+            if (peek_entry.value.is_last) {
                 j_al_append(prefix, end);
             } else {
                 j_al_append(prefix, T);
@@ -392,14 +583,14 @@ int main(int argc, char **argv) {
                     j_al_removeLast(prefix);
                 }
             }
-            if (peek_entry.entry.is_last) {
+            if (peek_entry.value.is_last) {
                 j_al_last(prefix) = end;
             } else {
                 j_al_last(prefix) = T;
             }
         }
-        current_entry_is_last = peek_entry.entry.is_last;
-        current_entry = *peek_entry.entry.dirent;
+        current_entry_is_last = peek_entry.value.is_last;
+        current_entry = *peek_entry.value.dirent;
         current_depth = j_al_len(walker.path.components);
     }
     print_current_prefix(prefix);

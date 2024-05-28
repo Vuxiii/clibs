@@ -64,10 +64,37 @@ void arraylist_free(ArrayList * _Nonnull list);
 
 // ======= STRING LIBRARY =======
 
+
+// MARK: - Str View
+
+#define _j_str_view_base_end(view) ((view)->base->str + (view)->base->len)
+#define _j_str_view_end(view) ((view)->current.str + (view)->current.len)
+#ifdef J_STR_VIEW_SHOULD_CLAMP
+#define _j_str_view_clamp(view) ((view).current.str = _j_str_view_end(view) > _j_str_view_base_end(view) ? (view).base->str + (view).base->len - (view).current.len : (view).current.str)
+#else
+#define _j_str_view_clamp(view) ((void)0)
+#endif
+#define j_str_view_set_width(view, n) ((view)->current.len = (n), _j_str_view_clamp(view))
+#define j_str_view_reset(view) ((view)->current = *(view)->base)
+#define j_str_view_advance(view, n) ((view)->current.str += (n), _j_str_view_clamp(view), &(view)->current)
+#define j_str_view_next(view) ((view)->current.str++, &(view)->current)
+#define j_str_view_prev(view) ((view)->current.str--, &(view)->current)
+#define j_str_view_at(view, n) ((view)->current.str[n])
+#define j_str_view_eq(view, str) (str_eq((view)->current, str))
+#define j_str_view_eq_cstr(view, cstr) (str_eq((view)->current, str_from_cstr(cstr)))
+#define j_str_view_current(view) (&((view)->current))
+#define j_str_view_has_next(view) (_j_str_view_end(view) <= _j_str_view_base_end(view))
+#define j_str_view_has_next_n(view, n) (_j_str_view_end(view) + (n) <= _j_str_view_base_end(view))
+
 typedef struct Str {
-    const char * _Nonnull str;
+    char * _Nonnull str;
     u32 len;
 } Str;
+
+typedef struct Str_View {
+    const Str * _Nonnull base;
+    Str current;
+} Str_View;
 
 typedef Str IStr;
 
@@ -83,6 +110,7 @@ void __attribute__((overloadable)) print(const Str format, ...);
 bool str_eq(const Str a, const Str b);
 const Str str_concat(const Str a, const Str b);
 Str str_from_cstr(const char * _Nonnull cstr);
+Str_View str_view(Str *str);
 bool str_a_contains_b(const Str a, const Str b);
 
 Str str_build_from_arraylist( const ArrayList * _Nonnull list );
@@ -136,30 +164,39 @@ typedef struct FS_Entry {
 
 #define j_bit_set(field, bit) ((field) |= (cast(typeof(field), 1) << (bit)))
 #define j_bit_check(field, bit) (!!((field) & (cast(typeof(field), 1) << (bit))))
+
+// MARK: - Basic Data Structures Stamps
+
+#define _j_stamp_pair(ft, st) \
+typedef struct Pair_ ## ft ## _ ## st { \
+    ft first;                 \
+    st second;                \
+} Pair_ ## ft ## _ ## st
+
+#define _j_stamp_maybe(type) \
+typedef struct Maybe ## type { \
+    type value;              \
+    bool is_present;         \
+} Maybe ## type
+
+// Mark: - Pair
+#define j_pair(ft, st) Pair ## _ ## ft ## _ ## st
+
+_j_stamp_pair(u32, u32);
+
 // MARK: - Maybe
+_j_stamp_maybe(Str);
+_j_stamp_maybe(u32);
+_j_stamp_maybe(FS_Walker);
+_j_stamp_maybe(FS_Entry);
 
-typedef struct MaybeStr {
-    Str str;
-    bool is_present;
-} MaybeStr;
+#define j_maybe(type) Maybe ## type
 
-typedef struct Maybeu32 {
-    u32 value;
-    bool is_present;
-} Maybeu32;
-
-typedef struct MaybeFS_Walker {
-    FS_Walker walker;
-    bool is_present;
-} MaybeFS_Walker;
-
-typedef struct MaybeFS_Entry {
-    FS_Entry entry;
-    bool is_present;
-} MaybeFS_Entry;
+//TODO: William Also do a j_view(type)
 
 // MARK: - ArrayList New
 #define EMPTY_ARRAY NULL
+#define j_list(type) type * _Nullable
 
 typedef struct ArrHeader {
     u32 len;
@@ -681,15 +718,33 @@ const Str str_concat(const Str a, const Str b) {
     Str c = {str, len};
     return c;
 }
-// TODO: William I should probably copy the string here.
-// Or make another function that copies it for when another owns the string.
+
+
+/**
+ * @brief Constructs and owns a Str from a c-string.
+ * @param cstr The c-string to construct the Str from.
+ * @return The constructed Str.
+ */
 Str str_from_cstr(const char * _Nonnull cstr) {
-    Str str = {cstr, 0};
-    while (cstr[str.len] != '\0') {
-        str.len++;
-    }
-    return str;
+    size_t len = strlen(cstr);
+    char *p = (char *)malloc(len + 1);
+    jassert(p, "Failed to allocate memory for string.");
+    strncpy(p, cstr, len);
+    return (Str) {.str = p, .len = len};
 }
+
+/**
+ * @brief Constructs a non-owning View of a Str.
+ * @param str The Str to construct the Str_View from.
+ * @return The constructed Str_View.
+ */
+Str_View str_view(Str *str) {
+    return (Str_View) {
+        .base = str,
+        .current = *str
+    };
+}
+
 
 bool str_eq(Str a, Str b) {
     if (a.len != b.len) {
