@@ -280,158 +280,40 @@ void print_a_len(int *a) {
     print("{u32}\n", j_al_len(a));
 }
 
-typedef struct Regex_Token {
-    i32 c: 8;           // Some character
-    u32 is_wildcard: 1; // .
-    u32 is_optional: 1; // ?
-    u32 is_plus: 1;     // +
-    u32 is_star: 1;     // *
-    u32 is_union: 1;    // |
-    u32 is_digit: 1;    // \d [:digit:] [0-9]
-    u32 is_alpha: 1;    // \w [:alpha:] [a-zA-Z]
-    u32 is_alnum: 1;    //    [:alnum:] [a-zA-Z0-9]
-    u32 is_space: 1;    // \s [:space:] [ \t\n\r\f\v]
-    u32 is_lower: 1;    // \l [:lower:] [a-z]
-    u32 is_upper: 1;    // \u [:upper:] [A-Z]
-} Regex_Token;
 
-typedef struct MaybeRegex_Token_Array {
-    j_list(Regex_Token) tokens;
-    bool is_present;
-} MaybeRegex_Token_Array;
 
-typedef struct Regex {
-    j_list(Regex_Token) states;
-    j_list(j_pair(u32, u32)) transitions;
-    j_list(u32) accepting_states;
-    u32 start_state;
-    u32 current_state;
-} Regex;
 
-_j_stamp_maybe(Regex);
-
-j_maybe(Regex) j_regex(Str pattern);
-j_maybe(Regex_Token_Array) j_regex_tokenize(Str pattern);
-bool j_regex_tokenize_next(j_list(Regex_Token) *tokens, Str_View *pattern);
-
-bool j_regex_tokenize_next(j_list(Regex_Token) *tokenss, Str_View *pattern) {
-    if (j_str_view_has_next(pattern) == false) {
-        return false;
-    }
-    j_list(Regex_Token) tokens = *tokenss;
-    if (j_str_view_eq_cstr(pattern, ".")) {
-        j_al_append(tokens, (Regex_Token) {.is_wildcard = true});
-    } else if (j_str_view_eq_cstr(pattern, "|")) {
-        j_al_append(tokens, (Regex_Token) {.is_union = true});
-    } else if (j_str_view_eq_cstr(pattern, "*")) {
-        j_al_append(tokens, (Regex_Token) {.is_star = true});
-    } else if (j_str_view_eq_cstr(pattern, "+")) {
-        j_al_append(tokens, (Regex_Token) {.is_plus = true});
-    } else if (j_str_view_eq_cstr(pattern, "?")) {
-        j_al_append(tokens, (Regex_Token) {.is_optional = true});
-    } else if (j_str_view_eq_cstr(pattern, "\\")) {
-        j_str_view_set_width(pattern, 2);
-        if (j_str_view_eq_cstr(pattern, "\\d")) {
-            j_al_append(tokens, (Regex_Token) {.is_digit = true});
-        } else if (j_str_view_eq_cstr(pattern, "\\w")) {
-            j_al_append(tokens, (Regex_Token) {.is_alpha = true});
-        } else if (j_str_view_eq_cstr(pattern, "\\s")) {
-            j_al_append(tokens, (Regex_Token) {.is_space = true});
-        } else if (j_str_view_eq_cstr(pattern, "\\l")) {
-            j_al_append(tokens, (Regex_Token) {.is_lower = true});
-        } else if (j_str_view_eq_cstr(pattern, "\\u")) {
-            j_al_append(tokens, (Regex_Token) {.is_upper = true});
-        } else if (j_str_view_eq_cstr(pattern, "\\.")) {
-            j_al_append(tokens, (Regex_Token) {.c = '.'});
-        } else if (j_str_view_eq_cstr(pattern, "\\|")) {
-            j_al_append(tokens, (Regex_Token) {.c = '|'});
-        } else if (j_str_view_eq_cstr(pattern, "\\*")) {
-            j_al_append(tokens, (Regex_Token) {.c = '*'});
-        } else if (j_str_view_eq_cstr(pattern, "\\+")) {
-            j_al_append(tokens, (Regex_Token) {.c = '+'});
-        } else if (j_str_view_eq_cstr(pattern, "\\?")) {
-            j_al_append(tokens, (Regex_Token) {.c = '?'});
-        } else {
-            jassert(false, "Unknown escape sequence\n");
-        }
-        j_str_view_next(pattern);
-        j_str_view_set_width(pattern, 1);
-    } else {
-        char c = j_str_view_current(pattern)->str[0];
-        j_al_append(tokens, (Regex_Token) {.c = c });
-    }
-    j_str_view_next(pattern);
-    *tokenss = tokens;
-    return true;
-}
-
-j_maybe(Regex_Token_Array) j_regex_tokenize(Str pattern) {
-    j_list(Regex_Token) tokens = EMPTY_ARRAY;
-
-    Str_View view = str_view(&pattern);
-
-    j_str_view_set_width(&view, 1);
-    bool success = false;
-
-    while ((success = j_regex_tokenize_next(&tokens, &view)) == true) {
-        //TODO: William Make a lazy here version...
-    }
-
-    if (j_al_len(tokens) == 0) {
-        return (j_maybe(Regex_Token_Array)) { .is_present = false };
-    }
-
-    return (j_maybe(Regex_Token_Array)) { .tokens = tokens, .is_present = true };
-}
-
-MaybeRegex j_regex(Str pattern) {
-
-    //TODO: William Fix this macro text subst....
-    j_maybe(j_list(Regex_Token)) mtokar = j_regex_tokenize(pattern);
-
-//    return (MaybeRegex) { .is_present = false };
-}
 
 int main(int argc, char **argv) {
 
+    // Hmmm, figure out what to do here. I want type safety.
+    // But again, what is the type. j_pair<Key, Value>? Or just Value *?
+    j_hmap(Str, Str) map = EMPTY_HMAP;
 
-    j_maybe(Regex) mregex = j_regex(str_from_cstr("H .E | L + L O \\d \\w \\s \\l \\u . *"));
+    Str key = str_from_cstr("key");
+    Str value = str_from_cstr("value");
+//    j_hmap_put(map, key, str_from_cstr("value"));
 
-    if (mregex.is_present == false) {
-        print("Failed to parse regex\n");
-        return 1;
+    // Check if map is empty
+    if (map == EMPTY_HMAP) {
+        map = malloc(sizeof(map[0]) * 10 + sizeof(HMapHeader));
+        jassert(map, "Failed to allocate map.\n");
+        cast(HMapHeader *, map)->cap = 10;
+        cast(HMapHeader *, map)->len = 0;
+        map = cast(typeof(map), cast(HMapHeader *, map) + 1);
     }
-    Regex regex = mregex.value;
-//    assert(j_al_len(regex.states) == 2);
-//    assert(regex.states[0].is_wildcard == 1);
-
-    for (u32 i = 0; i < j_al_len(regex.states); ++i) {
-        if (regex.states[i].is_wildcard == 1) {
-            print(".");
-        } else if (regex.states[i].is_union) {
-            print("|");
-        } else if (regex.states[i].is_star) {
-            print("*");
-        } else if (regex.states[i].is_plus) {
-            print("+");
-        } else if (regex.states[i].is_optional) {
-            print("?");
-        } else if (regex.states[i].is_digit) {
-            print("\\d");
-        } else if (regex.states[i].is_alpha) {
-            print("\\w");
-        } else if (regex.states[i].is_space) {
-            print("\\s");
-        } else if (regex.states[i].is_lower) {
-            print("\\l");
-        } else if (regex.states[i].is_upper) {
-            print("\\u");
-        } else {
-            char c = (char)regex.states[i].c;
-            print("{str}", (Str) { .str = &c, .len = 1 });
-        }
+    // Check if map is full
+    if (j_hmap_header(map)->len == j_hmap_header(map)->cap) {
+        void *p = realloc(cast(HMapHeader *, map) - 1, _j_hmap_realloc_new_size(map));
+        jassert(map, "Failed to reallocate map.\n");
+        j_hmap_header(map)->cap *= 2;
+        (map) = p + sizeof(HMapHeader);
     }
-
+    // Insert key value pair
+    u32 index = j_hash(key) % j_hmap_header(map)->cap;
+    if (map[index])
+    map[j_hmap_header(map)->len].first = key;
+    map[j_hmap_header(map)->len].second = value;
     return 0;
 }
 

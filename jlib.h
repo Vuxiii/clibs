@@ -165,6 +165,8 @@ typedef struct FS_Entry {
 #define j_bit_set(field, bit) ((field) |= (cast(typeof(field), 1) << (bit)))
 #define j_bit_check(field, bit) (!!((field) & (cast(typeof(field), 1) << (bit))))
 
+
+
 // MARK: - Basic Data Structures Stamps
 
 #define _j_stamp_pair(ft, st) \
@@ -190,7 +192,7 @@ _j_stamp_maybe(u32);
 _j_stamp_maybe(FS_Walker);
 _j_stamp_maybe(FS_Entry);
 
-#define j_maybe(type) Maybe ## type
+#define j_maybe(type) Maybe##type
 
 //TODO: William Also do a j_view(type)
 
@@ -208,8 +210,8 @@ typedef struct ArrHeader {
 #define j_al_cap(list) ((list) ? j_al_header(list)->cap : 0)
 #define _j_al_init(list) do\
 {                       \
-    if (list == EMPTY_ARRAY) { \
-        list = malloc(10 * sizeof(list[0]) + sizeof(ArrHeader)) + sizeof(ArrHeader); \
+    if ((list) == EMPTY_ARRAY) { \
+        (list) = malloc(10 * sizeof(list[0]) + sizeof(ArrHeader)) + sizeof(ArrHeader); \
         j_al_header(list)->len = 0;      \
         j_al_header(list)->cap = 10;      \
     }                   \
@@ -242,6 +244,151 @@ typedef struct ArrHeader {
 #define j_al_removeFirst(list) (memmove(list, list+1, sizeof(list[0]) * (j_al_len(list)-1)), j_al_header(list)->len -= 1)
 #define j_al_last(list) ((list)[j_al_len(list)-1])
 #define j_al_free(list) (free(j_al_header(list)), list = NULL)
+
+_j_stamp_pair(Str, Str);
+
+// MARK: - HashMap
+#define EMPTY_HMAP NULL
+#define j_hmap_header(map) ((map) ? cast(HMapHeader *, map) - 1 : EMPTY_HMAP)
+#define j_hmap_len(map) ((map) ? j_hmap_header(map)->len : 0)
+#define j_hmap_cap(map) ((map) ? j_hmap_header(map)->cap : 0)
+#define _j_hmap_next_size(map) (j_hmap_cap(map) * sizeof(map[0]) * 2)
+#define _j_hmap_realloc_new_size(map) (sizeof(ArrHeader) + _j_hmap_next_size(map))
+
+typedef struct HMapHeader {
+    u32 len;
+    u32 cap;
+} HMapHeader;
+
+#define j_hmap(ktp, vtp) type * _Nullable
+#define j_hmap_put(map, key, value)
+
+// MARK: - Regex
+
+typedef struct Regex_Edge {
+    i32 c: 8;           // Some character
+    u32 is_wildcard: 1; // .
+    u32 is_optional: 1; // ?
+    u32 is_plus: 1;     // +
+    u32 is_star: 1;     // *
+    u32 is_union: 1;    // |
+    u32 is_digit: 1;    // \d [:digit:] [0-9]
+    u32 is_alpha: 1;    // \w [:alpha:] [a-zA-Z]
+    u32 is_alnum: 1;    //    [:alnum:] [a-zA-Z0-9]
+    u32 is_space: 1;    // \s [:space:] [ \t\n\r\f\v]
+    u32 is_lower: 1;    // \l [:lower:] [a-z]
+    u32 is_upper: 1;    // \u [:upper:] [A-Z]
+
+    // For implementation...
+    u32 _is_epsilon: 1;
+} Regex_Edge;
+typedef u32 Vertex_Descriptor;
+
+_j_stamp_pair(Regex_Edge, Vertex_Descriptor);
+
+typedef struct Regex_Vertex {
+    j_list(j_pair(Regex_Edge, Vertex_Descriptor)) edges;
+} Regex_Vertex;
+
+typedef struct Regex {
+    j_list(Regex_Edge) edges;
+    j_list(Regex_Vertex) vertices;
+    j_list(Vertex_Descriptor) accepting_states;
+    Vertex_Descriptor start_state;
+    Vertex_Descriptor current_state;
+} Regex;
+
+_j_stamp_maybe(Regex);
+
+
+j_maybe(Regex) j_regex(Str pattern);
+bool j_regex_tokenize_next(j_list(Regex_Edge) *tokens, Str_View *pattern);
+
+bool j_regex_tokenize_next(j_list(Regex_Edge) *tokenss, Str_View *pattern) {
+    if (j_str_view_has_next(pattern) == false) {
+        return false;
+    }
+    j_list(Regex_Edge) tokens = *tokenss;
+    if (j_str_view_eq_cstr(pattern, ".")) {
+        j_al_append(tokens, (Regex_Edge) {.is_wildcard = true});
+    } else if (j_str_view_eq_cstr(pattern, "|")) {
+        j_al_append(tokens, (Regex_Edge) {.is_union = true});
+    } else if (j_str_view_eq_cstr(pattern, "*")) {
+        j_al_append(tokens, (Regex_Edge) {.is_star = true});
+    } else if (j_str_view_eq_cstr(pattern, "+")) {
+        j_al_append(tokens, (Regex_Edge) {.is_plus = true});
+    } else if (j_str_view_eq_cstr(pattern, "?")) {
+        j_al_append(tokens, (Regex_Edge) {.is_optional = true});
+    } else if (j_str_view_eq_cstr(pattern, "\\")) {
+        j_str_view_set_width(pattern, 2);
+        if (j_str_view_eq_cstr(pattern, "\\d")) {
+            j_al_append(tokens, (Regex_Edge) {.is_digit = true});
+        } else if (j_str_view_eq_cstr(pattern, "\\w")) {
+            j_al_append(tokens, (Regex_Edge) {.is_alpha = true});
+        } else if (j_str_view_eq_cstr(pattern, "\\s")) {
+            j_al_append(tokens, (Regex_Edge) {.is_space = true});
+        } else if (j_str_view_eq_cstr(pattern, "\\l")) {
+            j_al_append(tokens, (Regex_Edge) {.is_lower = true});
+        } else if (j_str_view_eq_cstr(pattern, "\\u")) {
+            j_al_append(tokens, (Regex_Edge) {.is_upper = true});
+        } else if (j_str_view_eq_cstr(pattern, "\\.")) {
+            j_al_append(tokens, (Regex_Edge) {.c = '.'});
+        } else if (j_str_view_eq_cstr(pattern, "\\|")) {
+            j_al_append(tokens, (Regex_Edge) {.c = '|'});
+        } else if (j_str_view_eq_cstr(pattern, "\\*")) {
+            j_al_append(tokens, (Regex_Edge) {.c = '*'});
+        } else if (j_str_view_eq_cstr(pattern, "\\+")) {
+            j_al_append(tokens, (Regex_Edge) {.c = '+'});
+        } else if (j_str_view_eq_cstr(pattern, "\\?")) {
+            j_al_append(tokens, (Regex_Edge) {.c = '?'});
+        } else {
+            jassert(false, "Unknown escape sequence\n");
+        }
+        j_str_view_next(pattern);
+        j_str_view_set_width(pattern, 1);
+    } else {
+        char c = j_str_view_current(pattern)->str[0];
+        j_al_append(tokens, (Regex_Edge) {.c = c });
+    }
+    j_str_view_next(pattern);
+    *tokenss = tokens;
+    return true;
+}
+
+MaybeRegex j_regex(Str pattern) {
+
+    //TODO: William Fix this macro text subst....
+    j_list(Regex_Edge) tokens = EMPTY_ARRAY;
+
+    Str_View view = str_view(&pattern);
+    j_str_view_set_width(&view, 1);
+
+    Regex re = {
+            .edges = EMPTY_ARRAY,
+            .vertices = EMPTY_ARRAY,
+            .accepting_states = EMPTY_ARRAY,
+            .start_state = 0,
+            .current_state = 0,
+    };
+
+    bool success;
+    Vertex_Descriptor previous;
+    while ((success = j_regex_tokenize_next(&tokens, &view)) == true) {
+
+        Regex_Edge edge = j_al_last(tokens);
+        Regex_Vertex vertex = {
+                .edges = EMPTY_ARRAY
+        };
+
+        j_al_append(re.edges, edge);
+        j_al_append(re.vertices, vertex);
+
+        previous = j_al_len(re.vertices) - 1;
+    }
+
+    return (MaybeRegex) { .is_present = false };
+}
+
 
 // MARK: - ArrayList
 ArrayList arraylist_new(u32 elem_size) {
