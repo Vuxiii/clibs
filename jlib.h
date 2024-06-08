@@ -181,6 +181,11 @@ typedef struct Pair_##ft##_##st { \
     st second;                \
 } Pair_##ft##_##st
 
+typedef struct Maybe {
+    bool is_present;
+    void *value;
+} Maybe;
+
 #define _J_STAMP_MAYBE(type) \
 typedef struct Maybe ## type { \
     bool is_present;         \
@@ -278,34 +283,6 @@ static bool j_hmap_generic_compare(const void *lhs, const void *rhs, size_t len)
     return memcmp(lhs, rhs, len) == 0;
 }
 
-//#define _j_stamp_hmap(ktp, vtp) \
-//typedef struct HMap##ktp##vtp { \
-//    u64 (*hasher)(const ktp key); \
-//    bool (*comp)(const ktp lhs, const ktp rhs); \
-//    u32 (*get_free_spot)(struct HMap##ktp##vtp *map, const ktp key); \
-//    u32 cap;                    \
-//    u32 len;                    \
-//    j_pair(ktp, vtp) * _Nullable entries;       \
-//    bool * _Nullable occupied;  \
-//} HMap##ktp##vtp; \
-//u32 HMap##ktp##vtp##_get_free_spot(HMap##ktp##vtp *map, const ktp key) { \
-//    jassert(map->len < map->cap, "Precondition: The map must have space for the new entry.\n"); \
-//    u32 index = map->hasher(key) % map->cap; \
-//    while (map->occupied[index] == false) { \
-//        index = (index + 1) % map->cap; \
-//    }                           \
-//    map->occupied[index] = true;\
-//    return index; \
-//}                               \
-//void HMap##ktp##vtp##_init(HMap##ktp##vtp *map, u32 cap) { \
-//    map->cap = cap;             \
-//    map->len = 0;               \
-//    map->entries = malloc(cap * sizeof(j_pair(ktp, vtp))); \
-//    map->occupied = malloc(cap * sizeof(bool)); \
-//    for (u32 i = 0; i < cap; i++) { \
-//        map->occupied[i] = false; \
-//    }                           \
-//}
 #define j_hmap(ktp, vtp) j_maybe( j_pair(ktp,vtp) ) * _Nullable
 #define EMPTY_HMAP NULL
 
@@ -316,19 +293,24 @@ typedef struct HMapHeader {
     u64 (*hasher)(const void *key, size_t len);
 } HMapHeader;
 
-u32 j_hmap_get_free_slot(HMapHeader *map, void *key, size_t key_size) {
+u32 j_hmap_get_slot_for_key(HMapHeader *map, void *key, size_t key_size, size_t entry_size) {
     jassert(map->len < map->cap, "Precondition: The map must have space for the new entry.\n");
 
     u32 index = map->hasher(key, key_size) % map->cap;
     char *entries = cast(char *, map + 1);
-
     // NOTE: Here we are assuming that the entry is a Maybe and the first element is the is_present field.
     // Here we also want to check if they are the same. If they are we return that index.
-    while (cast(bool, entries[index * key_size]) == true) {
+    while (cast(bool, *(entries + index * entry_size)) == true) {
+        char *value_entry = entries + index *entry_size + offsetof(struct Maybe, value);
+        // Again, Here we are assuming that the first entry is the key aka j_pair.first.
+        if (map->compare(value_entry, key, key_size) == true) {
+            print("Update on Index: {u32}\n", index);
+            return index;
+        }
         index = (index + 1) % map->cap;
     }
 
-    printf("Index: %d\n", index);
+    print("New on Index: {u32}\n", index);
 
     return index;
 }
@@ -353,24 +335,52 @@ u32 j_hmap_get_free_slot(HMapHeader *map, void *key, size_t key_size) {
 #define j_hmap_put(map, key, valuet) \
 ({                                  \
     j_hmap_init(map, j_hmap_generic_hash, j_hmap_generic_compare);              \
-    u32 index = j_hmap_get_free_slot(j_hmap_header(map), &key, sizeof(key)); \
+    u32 index = j_hmap_get_slot_for_key(j_hmap_header(map), &key, sizeof(key), sizeof(map[0])); \
     map[index].value.first = key;   \
     map[index].value.second = (valuet);\
     map[index].is_present = true;   \
     j_hmap_header(map)->len++;      \
 })
-
+#define j_hmap_remove(map, key) \
+({                              \
+    u32 index = j_hmap_get_slot_for_key(j_hmap_header(map), &key, sizeof(key), sizeof(map[0])); \
+    jassert(map[index].is_present == true, "Precondition: The key MUST be in the map before removing it!\n"); \
+    map[index].is_present = false;                                                              \
+    j_hmap_header(map)->len--;  \
+})
 // TODO: William - We can do better. No need to call % all the time.
 #define j_hmap_get(map, key) ({ \
     u32 index = j_hmap_header(map)->hasher(&key, sizeof(key)) % j_hmap_cap(map); \
     u32 offset = 0;                            \
-    while (j_hmap_header(map)->compare(&map[(index+offset) % j_hmap_cap(map)].value.first, &key, sizeof(key)) == false) { \
+    while (j_hmap_header(map)->compare(&map[(index+offset)].value.first, &key, sizeof(key)) == false) { \
         offset += 1;            \
+        if (index+offset == j_hmap_cap(map)) {                                   \
+            index = 0;                        \
+        }                        \
         jassert(offset < j_hmap_cap(map), "Precondition: The key must exist in the hmap before calling this function.\n"); \
     }                           \
-    print("Get on Index: {u32}\n", (index + offset) % j_hmap_cap(map));           \
-    map[(index+offset) % j_hmap_cap(map)].value.second;                          \
+    print("Get on Index: {u32}\n", (index + offset));           \
+    map[(index+offset)].value.second;                          \
 })
+#define j_hmap_iter_next(map, it) ({ \
+    u32 index = (it).value + 1; \
+    while (index < j_hmap_cap(map)) { \
+        if (map[index].is_present) { \
+            break; \
+        } \
+        index++; \
+    }                       \
+    Maybeu32 res = {0};                        \
+    if (index == j_hmap_cap(map)) {   \
+        res.is_present = false;\
+    } else {                \
+        res.is_present = true;        \
+        res.value = index;  \
+    }                       \
+    res;                    \
+})
+#define j_hmap_iter(map) j_hmap_iter_next(map, ((Maybeu32){false, -1}))
+#define j_hmap_iter_get(map, it) (jassert((it).is_present == true, "Precondition: Cannot call get on an nil value"), map[(it).value].value)
 
 bool j_hmap_compare_str(const void *lhs, const void *rhs, size_t len) {
     return str_eq(*(Str *)lhs, *(Str *)rhs);

@@ -296,6 +296,7 @@ int main(int argc, char **argv) {
     // Below can be j_hmap_init(Str, Str)
     j_hmap(Str, Str) map = EMPTY_HMAP;
     j_hmap_init(map, j_hmap_hash_str, j_hmap_compare_str);
+    printf("The address of our map is %p\n", map);
     // Perhaps we can also do, _j_hmap_init(Str, Str, map); -> j_hmap(Str, Str) map = j_hmap_init(Str, Str);
 
     Str key1 = str_from_cstr("key1");
@@ -319,12 +320,32 @@ int main(int argc, char **argv) {
 
     Str stored1 = j_hmap_get(map, key1);
     print("{str} -> {str}\n", key1, stored1);
+    j_hmap_put(map, key1, str_from_cstr("We just updated the value of key1 to this"));
+    stored1 = j_hmap_get(map, key1);
+    print("{str} -> {str}\n", key1, stored1);
     Str stored2 = j_hmap_get(map, key2);
     print("{str} -> {str}\n", key2, stored2);
     Str stored3 = j_hmap_get(map, key3);
     print("{str} -> {str}\n", key3, stored3);
     Str stored4 = j_hmap_get(map, key4);
     print("{str} -> {str}\n", key4, stored4);
+
+    print("Iterating over the map\n\n\n");
+
+    for (Maybeu32 it = j_hmap_iter(map); it.is_present; it = j_hmap_iter_next(map, it)) {
+        j_maybe(j_pair(Str, Str)) mentry = map[it.value];
+        j_pair(Str, Str) entry = j_hmap_iter_get(map, it);
+
+        print("{str} -> {str}\n", mentry.value.first, mentry.value.second);
+        print("{str} -> {str}\n", entry.first, entry.second);
+    }
+
+
+
+//    for (auto it = j_hmap_iter(map); it.has_next; j_hmap_iter_next(it)) {
+//        j_pair(Str, Str) entry = *it;
+//        print("{str} -> {str}\n", entry.first, entry.second);
+//    }
 
 //    Str stored4;
 //    ({
