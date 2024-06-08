@@ -531,50 +531,6 @@ MaybeRegex j_regex(Str pattern) {
     return (MaybeRegex) { .is_present = false };
 }
 
-
-// MARK: - ArrayList
-ArrayList arraylist_new(u32 elem_size) {
-    ArrayList list = {
-            .len = 0,
-            .elem_size = elem_size,
-            .cap = ARRAY_LIST_DEFAULT_CAP,
-            .data = malloc(ARRAY_LIST_DEFAULT_CAP * elem_size)
-    };
-    assert(list.data); // Failed to allocate memory.
-    return list;
-}
-
-void arraylist_free(ArrayList * _Nonnull list) {
-    free(list->data);
-}
-
-void arraylist_push(ArrayList * _Nonnull list, void * _Nonnull elem) {
-    if (list->len == list->cap) {
-        list->cap *= 2;
-        void *p = realloc(list->data, list->cap * list->elem_size);
-        assert(p); // Failed to reallocate memory.
-        list->data = p;
-    }
-    u32 offset = list->len * list->elem_size;
-    for (u32 i = 0; i < list->elem_size; i++) {
-        ((char *) list->data)[offset + i] = ((char *) elem)[i];
-    }
-    list->len++;
-}
-
-void arraylist_remove(ArrayList * _Nonnull list, u32 index) {
-    assert(index < list->len); // Index out of bounds.
-    u32 offset = index * list->elem_size;
-    for (u32 j = index; j < list->len; j++) {
-        for (u32 i = 0; i < list->elem_size; i++) {
-            ((char *) list->data)[offset + i] = ((char *) list->data)[offset + list->elem_size + i];
-        }
-        offset += list->elem_size;
-    }
-
-    list->len--;
-}
-
 static j_list(FormatOption) options = EMPTY_ARRAY;
 
 void str_register(const char * _Nonnull format, const Str (* _Nonnull printer)(va_list * _Nonnull args)) {
@@ -891,9 +847,7 @@ static void init_printers(void) __attribute__((constructor)) {
     str_register("{str}", str_Printer);
 }
 #endif
-// TODO: William Fix me -> There is a bug... {str}{str} prints "correct here{str}"
 static inline const Str str_format_impl(const Str format, va_list args ) {
-//    ArrayList strs = arraylist_new(sizeof(Str));
     Str *strs = EMPTY_ARRAY;
     u32 last_printed = 0;
     // Scan through the format string and discover any registered format options.
@@ -936,11 +890,7 @@ static inline const Str str_format_impl(const Str format, va_list args ) {
             }
         }
     }
-    Str temp_str = {
-        .str = format.str + last_printed,
-        .len = format.len - last_printed
-    };
-    j_al_append(strs, temp_str);
+    j_al_append(strs, ((Str) { .str = format.str + last_printed, .len = format.len - last_printed}));
 
     Str out = str_build_from_arraylist(strs);
 
