@@ -169,36 +169,47 @@ typedef struct FS_Entry {
 
 // MARK: - Basic Data Structures Stamps
 
-#define _j_stamp_pair(ft, st) \
-typedef struct Pair_ ## ft ## _ ## st { \
+#define EXPAND(x) x
+#define CONCAT(x, y) x ## y
+#define J_MAYBE(type) Maybe##type
+#define J_PAIR(ft, st) Pair_##ft##_##st
+#define J_LIST(type) type * _Nullable
+
+#define _J_STAMP_PAIR(ft, st) \
+typedef struct Pair_##ft##_##st { \
     ft first;                 \
     st second;                \
-} Pair_ ## ft ## _ ## st
+} Pair_##ft##_##st
 
-#define _j_stamp_maybe(type) \
+#define _J_STAMP_MAYBE(type) \
 typedef struct Maybe ## type { \
-    type value;              \
     bool is_present;         \
-} Maybe ## type
+    type value;              \
+} Maybe##type
 
 // Mark: - Pair
-#define j_pair(ft, st) Pair ## _ ## ft ## _ ## st
+#define j_pair(ft, st) J_PAIR(ft, st)
+
+#define _j_stamp_pair(ft, st) _J_STAMP_PAIR(ft, st)
+#define _j_stamp_maybe(type) _J_STAMP_MAYBE(type)
 
 _j_stamp_pair(u32, u32);
+_j_stamp_pair(Str, Str);
 
 // MARK: - Maybe
 _j_stamp_maybe(Str);
 _j_stamp_maybe(u32);
 _j_stamp_maybe(FS_Walker);
 _j_stamp_maybe(FS_Entry);
+_j_stamp_maybe(j_pair(Str, Str));
 
-#define j_maybe(type) Maybe##type
+#define j_maybe(type) J_MAYBE(type)
 
 //TODO: William Also do a j_view(type)
 
 // MARK: - ArrayList New
 #define EMPTY_ARRAY NULL
-#define j_list(type) type * _Nullable
+#define j_list(type) J_LIST(type)
 
 typedef struct ArrHeader {
     u32 len;
@@ -245,23 +256,129 @@ typedef struct ArrHeader {
 #define j_al_last(list) ((list)[j_al_len(list)-1])
 #define j_al_free(list) (free(j_al_header(list)), list = NULL)
 
-_j_stamp_pair(Str, Str);
+
 
 // MARK: - HashMap
+#define FNV_OFFSET 14695981039346656037UL
+#define FNV_PRIME 1099511628211UL
+
+// Return 64-bit FNV-1a hash for key (NUL-terminated). See description:
+// https://en.wikipedia.org/wiki/Fowler-Noll-Vo_hash_function
+static u64 j_hmap_generic_hash(const void *key, size_t len) {
+    uint64_t hash = FNV_OFFSET;
+    size_t count = 0;
+    for (const char* p = key; count < len; ++count) { // TODO: William check if we are indeed using NULL terminated strings.
+        hash ^= (uint64_t)(unsigned char)(*p);
+        hash *= FNV_PRIME;
+    }
+    return hash;
+}
+
+static bool j_hmap_generic_compare(const void *lhs, const void *rhs, size_t len) {
+    return memcmp(lhs, rhs, len) == 0;
+}
+
+//#define _j_stamp_hmap(ktp, vtp) \
+//typedef struct HMap##ktp##vtp { \
+//    u64 (*hasher)(const ktp key); \
+//    bool (*comp)(const ktp lhs, const ktp rhs); \
+//    u32 (*get_free_spot)(struct HMap##ktp##vtp *map, const ktp key); \
+//    u32 cap;                    \
+//    u32 len;                    \
+//    j_pair(ktp, vtp) * _Nullable entries;       \
+//    bool * _Nullable occupied;  \
+//} HMap##ktp##vtp; \
+//u32 HMap##ktp##vtp##_get_free_spot(HMap##ktp##vtp *map, const ktp key) { \
+//    jassert(map->len < map->cap, "Precondition: The map must have space for the new entry.\n"); \
+//    u32 index = map->hasher(key) % map->cap; \
+//    while (map->occupied[index] == false) { \
+//        index = (index + 1) % map->cap; \
+//    }                           \
+//    map->occupied[index] = true;\
+//    return index; \
+//}                               \
+//void HMap##ktp##vtp##_init(HMap##ktp##vtp *map, u32 cap) { \
+//    map->cap = cap;             \
+//    map->len = 0;               \
+//    map->entries = malloc(cap * sizeof(j_pair(ktp, vtp))); \
+//    map->occupied = malloc(cap * sizeof(bool)); \
+//    for (u32 i = 0; i < cap; i++) { \
+//        map->occupied[i] = false; \
+//    }                           \
+//}
+#define j_hmap(ktp, vtp) j_maybe( j_pair(ktp,vtp) ) * _Nullable
 #define EMPTY_HMAP NULL
-#define j_hmap_header(map) ((map) ? cast(HMapHeader *, map) - 1 : EMPTY_HMAP)
-#define j_hmap_len(map) ((map) ? j_hmap_header(map)->len : 0)
-#define j_hmap_cap(map) ((map) ? j_hmap_header(map)->cap : 0)
-#define _j_hmap_next_size(map) (j_hmap_cap(map) * sizeof(map[0]) * 2)
-#define _j_hmap_realloc_new_size(map) (sizeof(ArrHeader) + _j_hmap_next_size(map))
 
 typedef struct HMapHeader {
+    u32 cap; // It is going to be quite expensive to realloc the map because we need to rehash all the keys.
     u32 len;
-    u32 cap;
+    bool (*compare)(const void *lhs, const void *rhs, size_t len);
+    u64 (*hasher)(const void *key, size_t len);
 } HMapHeader;
 
-#define j_hmap(ktp, vtp) type * _Nullable
-#define j_hmap_put(map, key, value)
+u32 j_hmap_get_free_slot(HMapHeader *map, void *key, size_t key_size) {
+    jassert(map->len < map->cap, "Precondition: The map must have space for the new entry.\n");
+
+    u32 index = map->hasher(key, key_size) % map->cap;
+    char *entries = cast(char *, map + 1);
+
+    // NOTE: Here we are assuming that the entry is a Maybe and the first element is the is_present field.
+    // Here we also want to check if they are the same. If they are we return that index.
+    while (cast(bool, entries[index * key_size]) == true) {
+        index = (index + 1) % map->cap;
+    }
+
+    printf("Index: %d\n", index);
+
+    return index;
+}
+
+#define j_hmap_header(map) ((map) ? cast(HMapHeader *, map) - 1 : EMPTY_HMAP)
+#define _j_hmap_init_compare(map, compare_func) j_hmap_header(map)->compare = (compare_func)
+#define _j_hmap_init_hasher(map, hasher_func) j_hmap_header(map)->hasher = (hasher_func)
+#define j_hmap_init(map, hasher_func, compare_func) \
+({                       \
+    if ((map) == EMPTY_HMAP) { \
+        (map) = calloc(10, sizeof(map[0]) + sizeof(HMapHeader)) + sizeof(HMapHeader); \
+        j_hmap_header(map)->len = 0;                                                   \
+        j_hmap_header(map)->cap = 10;      \
+        _j_hmap_init_compare(map, compare_func);                                        \
+        _j_hmap_init_hasher(map, hasher_func);                                        \
+    }                                      \
+})
+
+#define j_hmap_cap(map) ((map) ? j_hmap_header(map)->cap : 0)
+#define j_hmap_len(map) ((map) ? j_hmap_header(map)->len : 0)
+#define _j_hmap_next_size(map) (j_hmap_cap(map) * sizeof(map[0]) * 2)
+#define j_hmap_put(map, key, valuet) \
+({                                  \
+    j_hmap_init(map, j_hmap_generic_hash, j_hmap_generic_compare);              \
+    u32 index = j_hmap_get_free_slot(j_hmap_header(map), &key, sizeof(key)); \
+    map[index].value.first = key;   \
+    map[index].value.second = (valuet);\
+    map[index].is_present = true;   \
+    j_hmap_header(map)->len++;      \
+})
+
+// TODO: William - We can do better. No need to call % all the time.
+#define j_hmap_get(map, key) ({ \
+    u32 index = j_hmap_header(map)->hasher(&key, sizeof(key)) % j_hmap_cap(map); \
+    u32 offset = 0;                            \
+    while (j_hmap_header(map)->compare(&map[(index+offset) % j_hmap_cap(map)].value.first, &key, sizeof(key)) == false) { \
+        offset += 1;            \
+        jassert(offset < j_hmap_cap(map), "Precondition: The key must exist in the hmap before calling this function.\n"); \
+    }                           \
+    print("Get on Index: {u32}\n", (index + offset) % j_hmap_cap(map));           \
+    map[(index+offset) % j_hmap_cap(map)].value.second;                          \
+})
+
+bool j_hmap_compare_str(const void *lhs, const void *rhs, size_t len) {
+    return str_eq(*(Str *)lhs, *(Str *)rhs);
+}
+
+u64 j_hmap_hash_str(const void *key, size_t len) {
+    return j_hmap_generic_hash(((Str *)key)->str, ((Str *)key)->len);
+}
 
 // MARK: - Regex
 
@@ -873,6 +990,7 @@ const Str str_concat(const Str a, const Str b) {
  * @return The constructed Str.
  */
 Str str_from_cstr(const char * _Nonnull cstr) {
+    //TODO: (William) We can use sizeof(cstr) here.
     size_t len = strlen(cstr);
     char *p = (char *)malloc(len + 1);
     jassert(p, "Failed to allocate memory for string.");

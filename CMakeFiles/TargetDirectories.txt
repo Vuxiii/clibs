@@ -1,3 +1,0 @@
-/Users/not_archbtw/dev/c/libs/CMakeFiles/libs.dir
-/Users/not_archbtw/dev/c/libs/CMakeFiles/edit_cache.dir
-/Users/not_archbtw/dev/c/libs/CMakeFiles/rebuild_cache.dir

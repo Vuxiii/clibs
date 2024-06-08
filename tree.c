@@ -280,40 +280,69 @@ void print_a_len(int *a) {
     print("{u32}\n", j_al_len(a));
 }
 
-
-
+//typedef u64 *HashFunction(const void *);
+//
+//typedef struct HMapStrStr {
+//    HashFunction *hasher;
+//    j_list(j_pair(Str, Str)) entries;
+//} HMapStrStr;
 
 
 int main(int argc, char **argv) {
 
     // Hmmm, figure out what to do here. I want type safety.
     // But again, what is the type. j_pair<Key, Value>? Or just Value *?
+
+    // Below can be j_hmap_init(Str, Str)
     j_hmap(Str, Str) map = EMPTY_HMAP;
+    j_hmap_init(map, j_hmap_hash_str, j_hmap_compare_str);
+    // Perhaps we can also do, _j_hmap_init(Str, Str, map); -> j_hmap(Str, Str) map = j_hmap_init(Str, Str);
 
-    Str key = str_from_cstr("key");
-    Str value = str_from_cstr("value");
-//    j_hmap_put(map, key, str_from_cstr("value"));
+    Str key1 = str_from_cstr("key1");
+    Str value = str_from_cstr("value1");
 
-    // Check if map is empty
-    if (map == EMPTY_HMAP) {
-        map = malloc(sizeof(map[0]) * 10 + sizeof(HMapHeader));
-        jassert(map, "Failed to allocate map.\n");
-        cast(HMapHeader *, map)->cap = 10;
-        cast(HMapHeader *, map)->len = 0;
-        map = cast(typeof(map), cast(HMapHeader *, map) + 1);
-    }
-    // Check if map is full
-    if (j_hmap_header(map)->len == j_hmap_header(map)->cap) {
-        void *p = realloc(cast(HMapHeader *, map) - 1, _j_hmap_realloc_new_size(map));
-        jassert(map, "Failed to reallocate map.\n");
-        j_hmap_header(map)->cap *= 2;
-        (map) = p + sizeof(HMapHeader);
-    }
-    // Insert key value pair
-    u32 index = j_hash(key) % j_hmap_header(map)->cap;
-    if (map[index])
-    map[j_hmap_header(map)->len].first = key;
-    map[j_hmap_header(map)->len].second = value;
+    Str key2 = str_from_cstr("Some awesome String Key");
+    Str value2 = str_from_cstr("Some awesome String Value");
+
+    Str key3 = str_from_cstr("Some key");
+    Str value3 = str_from_cstr("Some value");
+
+    Str key4 = str_from_cstr("Yet another key way");
+    Str value4 = str_from_cstr("Yet another value");
+
+
+
+    j_hmap_put(map, key1, value);
+    j_hmap_put(map, key2, value2);
+    j_hmap_put(map, key3, value3);
+    j_hmap_put(map, key4, value4);
+
+    Str stored1 = j_hmap_get(map, key1);
+    print("{str} -> {str}\n", key1, stored1);
+    Str stored2 = j_hmap_get(map, key2);
+    print("{str} -> {str}\n", key2, stored2);
+    Str stored3 = j_hmap_get(map, key3);
+    print("{str} -> {str}\n", key3, stored3);
+    Str stored4 = j_hmap_get(map, key4);
+    print("{str} -> {str}\n", key4, stored4);
+
+//    Str stored4;
+//    ({
+//        u32 index = ((map) ? ((HMapHeader *) (map)) - 1 : ((void *) 0))->hasher(&key4, sizeof(key4)) %
+//                    ((map) ? ((map) ? ((HMapHeader *) (map)) - 1 : ((void *) 0))->cap : 0);
+//        u32 offset = 0;
+//        while (((map) ? ((HMapHeader *) (map)) - 1 : ((void *) 0))->compare(
+//                &map[(index + offset) % ((map) ? ((map) ? ((HMapHeader *) (map)) - 1 : ((void *) 0))->cap : 0)].value. first,
+//                &key4, sizeof(key4)) == 0) {
+//            offset = offset+1;
+//            ((__builtin_expect(offset >= ((map) ? ((map) ? ((HMapHeader *) (map)) - 1 : ((void *) 0))->cap : 0), 0)
+//              ? __assert_rtn("_function_name_", "_file_name_short_", 326,
+//                             "offset < ((map) ? ((map) ? ((HMapHeader *)(map)) - 1 : ((void*) 0))->cap : 0)") : (void) 0));
+//        }
+//        stored4 = map[index + offset % ((map) ? ((map) ? ((HMapHeader *) (map)) - 1 : ((void *) 0))->cap : 0)].value.second;
+//    });
+
+
     return 0;
 }
 
