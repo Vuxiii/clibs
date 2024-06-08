@@ -288,14 +288,15 @@ void print_a_len(int *a) {
 //} HMapStrStr;
 
 
-int main(int argc, char **argv) {
+int hmap_test(int argc, char **argv) {
 
     // Hmmm, figure out what to do here. I want type safety.
     // But again, what is the type. j_pair<Key, Value>? Or just Value *?
 
     // Below can be j_hmap_init(Str, Str)
     j_hmap(Str, Str) map = EMPTY_HMAP;
-    j_hmap_init(map, j_hmap_hash_str, j_hmap_compare_str, 100);
+    j_hmap_init(map, j_hmap_generic_hash, j_hmap_generic_compare, 100);
+//    j_hmap_init(map, j_hmap_hash_str, j_hmap_compare_str, 100);
     printf("The address of our map is %p\n", map);
     // Perhaps we can also do, _j_hmap_init(Str, Str, map); -> j_hmap(Str, Str) map = j_hmap_init(Str, Str);
 
@@ -363,7 +364,12 @@ int main(int argc, char **argv) {
 
 
 
+int main(void) {
 
+    print("{str}{str}", str_from_cstr("Hello"), str_from_cstr(" World\n"));
+
+    return 0;
+}
 
 
 

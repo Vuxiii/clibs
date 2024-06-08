@@ -86,6 +86,8 @@ void arraylist_free(ArrayList * _Nonnull list);
 #define j_str_view_has_next(view) (_j_str_view_end(view) <= _j_str_view_base_end(view))
 #define j_str_view_has_next_n(view, n) (_j_str_view_end(view) + (n) <= _j_str_view_base_end(view))
 
+#define j_list(type) type * _Nullable
+
 typedef struct Str {
     char * _Nonnull str;
     u32 len;
@@ -102,7 +104,6 @@ typedef struct FormatOption {
     Str format;
     const Str (* _Nonnull printer)(va_list * _Nonnull args);
 } FormatOption;
-#define MAX_FORMAT_OPTIONS 20
 
 void __attribute__((overloadable)) print(char *_Nonnull format, ...);
 void __attribute__((overloadable)) print(const Str format, ...);
@@ -113,7 +114,7 @@ Str str_from_cstr(const char * _Nonnull cstr);
 Str_View str_view(Str *str);
 bool str_a_contains_b(const Str a, const Str b);
 
-Str str_build_from_arraylist( const ArrayList * _Nonnull list );
+Str str_build_from_arraylist( const j_list(Str) list );
 
 const Str __attribute__((overloadable)) str_format(char * _Nonnull format, ...);
 const Str __attribute__((overloadable)) str_format(const Str format, ...);
@@ -215,7 +216,7 @@ _j_stamp_maybe(j_pair(Str, Str));
 
 // MARK: - ArrayList New
 #define EMPTY_ARRAY NULL
-#define j_list(type) J_LIST(type)
+//#define j_list(type) J_LIST(type)
 
 typedef struct ArrHeader {
     u32 len;
@@ -398,6 +399,12 @@ u64 j_hmap_hash_str(const void *key, size_t len) {
     return j_hmap_generic_hash(((Str *)key)->str, ((Str *)key)->len);
 }
 
+
+// MARK: - Red Black Tree
+
+
+
+
 // MARK: - Regex
 
 typedef struct Regex_Edge {
@@ -568,14 +575,10 @@ void arraylist_remove(ArrayList * _Nonnull list, u32 index) {
     list->len--;
 }
 
-static u32 _num_options = 0;
-static FormatOption options[MAX_FORMAT_OPTIONS] = {0};
+static j_list(FormatOption) options = EMPTY_ARRAY;
 
 void str_register(const char * _Nonnull format, const Str (* _Nonnull printer)(va_list * _Nonnull args)) {
-    assert(_num_options < MAX_FORMAT_OPTIONS); // Ensure that enough space has been allocated for the format options.
-    options[_num_options].format = str_from_cstr(format);
-    options[_num_options].printer = printer;
-    _num_options++;
+    j_al_append(options, ((FormatOption) {.format = str_from_cstr(format), .printer = printer}));
 }
 
 static const Str i32_Printer(va_list * _Nonnull args) {
@@ -890,27 +893,20 @@ static void init_printers(void) __attribute__((constructor)) {
 #endif
 // TODO: William Fix me -> There is a bug... {str}{str} prints "correct here{str}"
 static inline const Str str_format_impl(const Str format, va_list args ) {
-    ArrayList strs = arraylist_new(sizeof(Str));
+//    ArrayList strs = arraylist_new(sizeof(Str));
+    Str *strs = EMPTY_ARRAY;
     u32 last_printed = 0;
     // Scan through the format string and discover any registered format options.
     for (u32 i = 0; i < format.len; i++) {
         if (format.str[i] == '\\' && format.str[i + 1] == '{') {
             // We want to print upto here, but not the next character.
-            Str temp_str = {
-                .str = format.str + last_printed,
-                .len = i - last_printed
-            };
-            arraylist_push(&strs, &temp_str);
+            j_al_append(strs, ((Str) { .str = format.str + last_printed, .len = i - last_printed }));
             i++;
             last_printed = i;
             continue;
         }
         if (format.str[i] == '{') {
-            Str temp_str = {
-                .str = format.str + last_printed,
-                .len = i - last_printed
-            };
-            arraylist_push(&strs, &temp_str);
+            j_al_append(strs, ((Str) { .str = format.str + last_printed, .len = i - last_printed }));
             u32 j = i;
             bool found = false;
             while (j < format.len) {
@@ -925,15 +921,14 @@ static inline const Str str_format_impl(const Str format, va_list args ) {
                 Str option = {format.str + i, j - i + 1};
                 // Match for any registered options.
                 found = false;
-                for ( u32 k = 0; k < _num_options; k++ ) {
+                for ( u32 k = 0; k < j_al_len(options); k++ ) {
                     if ( str_eq( option, options[k].format ) ) {
                         const Str fmt = options[k].printer(&args);
-                        arraylist_push(&strs, (void*)&fmt);
-                        i = j + 1;
+                        j_al_append(strs, fmt);
+                        i = j;
                         found = true;
                         break;
                     }
-                    assert(k < _num_options); // No matching format option found.
                 }
                 assert(found); // Did not find a matching format option.
             } else {
@@ -945,11 +940,11 @@ static inline const Str str_format_impl(const Str format, va_list args ) {
         .str = format.str + last_printed,
         .len = format.len - last_printed
     };
-    arraylist_push(&strs, &temp_str);
+    j_al_append(strs, temp_str);
 
-    Str out = str_build_from_arraylist(&strs);
+    Str out = str_build_from_arraylist(strs);
 
-    arraylist_free(&strs);
+    // j_al_free(strs);
     return out;
 }
 
@@ -1060,18 +1055,18 @@ bool str_a_contains_b(Str a, Str b) {
     return 0;
 }
 
-Str str_build_from_arraylist( const ArrayList * _Nonnull list ) {
+Str str_build_from_arraylist( const j_list(Str) list ) {
     u32 total_len = 0;
-    forward_it(*list, Str) {
-        total_len += it->len;
+    for (u32 i = 0; i < j_al_len(list); i++) {
+        total_len += list[i].len;
     }
     char *str = (char*)malloc(total_len + 1);
     u32 offset = 0;
-    forward_it(*list, Str) {
-        for (u32 i = 0; i < it->len; i++) {
-            str[offset + i] = it->str[i];
+    for (u32 i = 0; i < j_al_len(list); ++i) {
+        for (u32 j = 0; j < list[i].len; j++) {
+            str[offset + j] = list[i].str[j];
         }
-        offset += it->len;
+        offset += list[i].len;
     }
     str[total_len] = '\0';
     return (Str){str, total_len};
