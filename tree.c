@@ -295,7 +295,7 @@ int main(int argc, char **argv) {
 
     // Below can be j_hmap_init(Str, Str)
     j_hmap(Str, Str) map = EMPTY_HMAP;
-    j_hmap_init(map, j_hmap_hash_str, j_hmap_compare_str);
+    j_hmap_init(map, j_hmap_hash_str, j_hmap_compare_str, 100);
     printf("The address of our map is %p\n", map);
     // Perhaps we can also do, _j_hmap_init(Str, Str, map); -> j_hmap(Str, Str) map = j_hmap_init(Str, Str);
 
@@ -340,29 +340,21 @@ int main(int argc, char **argv) {
         print("{str} -> {str}\n", entry.first, entry.second);
     }
 
+    print("count = {u32}\n", j_hmap_len(map));
 
+    j_hmap_removeAll(map);
+    print("After removing all entries\n");
+    print("count = {u32}\n", j_hmap_len(map));
 
-//    for (auto it = j_hmap_iter(map); it.has_next; j_hmap_iter_next(it)) {
-//        j_pair(Str, Str) entry = *it;
-//        print("{str} -> {str}\n", entry.first, entry.second);
-//    }
+    print("Inserting more than the cap elements\n");
+    for (u32 i = 0; i < 101; ++i) {
 
-//    Str stored4;
-//    ({
-//        u32 index = ((map) ? ((HMapHeader *) (map)) - 1 : ((void *) 0))->hasher(&key4, sizeof(key4)) %
-//                    ((map) ? ((map) ? ((HMapHeader *) (map)) - 1 : ((void *) 0))->cap : 0);
-//        u32 offset = 0;
-//        while (((map) ? ((HMapHeader *) (map)) - 1 : ((void *) 0))->compare(
-//                &map[(index + offset) % ((map) ? ((map) ? ((HMapHeader *) (map)) - 1 : ((void *) 0))->cap : 0)].value. first,
-//                &key4, sizeof(key4)) == 0) {
-//            offset = offset+1;
-//            ((__builtin_expect(offset >= ((map) ? ((map) ? ((HMapHeader *) (map)) - 1 : ((void *) 0))->cap : 0), 0)
-//              ? __assert_rtn("_function_name_", "_file_name_short_", 326,
-//                             "offset < ((map) ? ((map) ? ((HMapHeader *)(map)) - 1 : ((void*) 0))->cap : 0)") : (void) 0));
-//        }
-//        stored4 = map[index + offset % ((map) ? ((map) ? ((HMapHeader *) (map)) - 1 : ((void *) 0))->cap : 0)].value.second;
-//    });
+        Str key = str_format("Key{u32}", i);
+        Str value = str_format("value{u32}", i);
 
+        j_hmap_put(map, key, value);
+        print("The count is {u32} and i is {u32}\n", j_hmap_len(map), i);
+    }
 
     return 0;
 }

@@ -121,7 +121,8 @@ const Str __attribute__((overloadable)) str_format(const Str format, ...);
 void str_register(const char * _Nonnull format, const Str (* _Nonnull printer)(va_list * _Nonnull args));
 
 #define cast(type, value) ((type)(value))
-#define jassert(condition, message) (assert(condition))
+#define JASSERT(condition, message) (assert(condition && message))
+#define jassert(condition, message) (JASSERT(condition, message))
 #endif
 #ifdef JLIB_IMPL
 
@@ -311,19 +312,19 @@ u32 j_hmap_get_slot_for_key(HMapHeader *map, void *key, size_t key_size, size_t 
     }
 
     print("New on Index: {u32}\n", index);
-
+    map->len++;
     return index;
 }
 
 #define j_hmap_header(map) ((map) ? cast(HMapHeader *, map) - 1 : EMPTY_HMAP)
 #define _j_hmap_init_compare(map, compare_func) j_hmap_header(map)->compare = (compare_func)
 #define _j_hmap_init_hasher(map, hasher_func) j_hmap_header(map)->hasher = (hasher_func)
-#define j_hmap_init(map, hasher_func, compare_func) \
+#define j_hmap_init(map, hasher_func, compare_func, capacity) \
 ({                       \
     if ((map) == EMPTY_HMAP) { \
-        (map) = calloc(10, sizeof(map[0]) + sizeof(HMapHeader)) + sizeof(HMapHeader); \
+        (map) = calloc(capacity, sizeof(map[0]) + sizeof(HMapHeader)) + sizeof(HMapHeader); \
         j_hmap_header(map)->len = 0;                                                   \
-        j_hmap_header(map)->cap = 10;      \
+        j_hmap_header(map)->cap = (capacity);      \
         _j_hmap_init_compare(map, compare_func);                                        \
         _j_hmap_init_hasher(map, hasher_func);                                        \
     }                                      \
@@ -334,12 +335,12 @@ u32 j_hmap_get_slot_for_key(HMapHeader *map, void *key, size_t key_size, size_t 
 #define _j_hmap_next_size(map) (j_hmap_cap(map) * sizeof(map[0]) * 2)
 #define j_hmap_put(map, key, valuet) \
 ({                                  \
-    j_hmap_init(map, j_hmap_generic_hash, j_hmap_generic_compare);              \
+    j_hmap_init(map, j_hmap_generic_hash, j_hmap_generic_compare, 10); \
+    jassert(j_hmap_len(map) < j_hmap_cap(map), "Precondition: There must be room for the entry inside the hashmap"); \
     u32 index = j_hmap_get_slot_for_key(j_hmap_header(map), &key, sizeof(key), sizeof(map[0])); \
     map[index].value.first = key;   \
     map[index].value.second = (valuet);\
     map[index].is_present = true;   \
-    j_hmap_header(map)->len++;      \
 })
 #define j_hmap_remove(map, key) \
 ({                              \
@@ -348,7 +349,13 @@ u32 j_hmap_get_slot_for_key(HMapHeader *map, void *key, size_t key_size, size_t 
     map[index].is_present = false;                                                              \
     j_hmap_header(map)->len--;  \
 })
-// TODO: William - We can do better. No need to call % all the time.
+#define j_hmap_removeAll(map) do \
+{                               \
+    for (u32 i = 0; i < j_hmap_cap(map); i++) { \
+        map[i].is_present = false; \
+    }                           \
+    j_hmap_header(map)->len = 0; \
+} while(0)
 #define j_hmap_get(map, key) ({ \
     u32 index = j_hmap_header(map)->hasher(&key, sizeof(key)) % j_hmap_cap(map); \
     u32 offset = 0;                            \
@@ -362,6 +369,7 @@ u32 j_hmap_get_slot_for_key(HMapHeader *map, void *key, size_t key_size, size_t 
     print("Get on Index: {u32}\n", (index + offset));           \
     map[(index+offset)].value.second;                          \
 })
+#define j_hmap_is_empty(map) (j_hmap_len(map) == 0)
 #define j_hmap_iter_next(map, it) ({ \
     u32 index = (it).value + 1; \
     while (index < j_hmap_cap(map)) { \
