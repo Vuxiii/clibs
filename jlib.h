@@ -24,42 +24,6 @@ typedef double f64;
 #define true 1
 
 
-// ======= ArrayList LIBRARY =======
-
-#define ARRAY_LIST_DEFAULT_CAP 10
-typedef struct ArrayList {
-    void * _Nonnull data;
-    u32 len;
-    u32 cap;
-    const u32 elem_size;
-} ArrayList;
-
-ArrayList arraylist_new(u32 elem_size);
-
-#define array_push(list, elem) _Generic((elem), \
-    u32: arraylist_push(list, &(u32){elem}),    \
-    i32: arraylist_push(list, &(i32){elem}),    \
-    u64: arraylist_push(list, &(u64){elem}),    \
-    i64: arraylist_push(list, &(i64){elem}),    \
-    f32: arraylist_push(list, &(f32){elem}),    \
-    f64: arraylist_push(list, &(f64){elem}),    \
-    u8: arraylist_push(list, &(u8){elem}),      \
-    i8: arraylist_push(list, &(i8){elem}),      \
-    u16: arraylist_push(list, &(u16){elem}),    \
-    i16: arraylist_push(list, &(i16){elem}))//,    \
-//    default: arraylist_push(list, elem))    \
-
-void arraylist_push(ArrayList * _Nonnull list, void * _Nonnull elem);
-
-void arraylist_remove(ArrayList * _Nonnull list, u32 index);
-
-void arraylist_free(ArrayList * _Nonnull list);
-
-#define arraylist_last(list, type) ((type *)list.data)[list.len - 1]
-#define forward_it(list, type) for (type *it = (type *)(list).data; it != (type *)(list).data + (list).len; it++)
-#define reverse_it(list, type) for (type *it = &arraylist_last(list, type); it != (type *)list.data-1; it--)
-#define arraylist_at(list, index, type) ((type *)list.data)[index]
-#define arraylist_sort(list, compare) qsort((list).data, (list).len, (list).elem_size, compare);
 
 
 // ======= STRING LIBRARY =======
@@ -88,6 +52,11 @@ void arraylist_free(ArrayList * _Nonnull list);
 
 #define j_list(type) type * _Nullable
 
+#define cast(type, value) ((type)(value))
+#define JASSERT(condition, message) (assert(condition && message))
+#define jassert(condition, message) (JASSERT(condition, message))
+
+
 typedef struct Str {
     char * _Nonnull str;
     u32 len;
@@ -97,6 +66,54 @@ typedef struct Str_View {
     const Str * _Nonnull base;
     Str current;
 } Str_View;
+
+typedef struct SubStr {
+    const Str * _Nonnull base;
+    Str str;
+} SubStr;
+
+#define EXPAND(x) x
+#define CONCAT(x, y) x ## y
+#define J_MAYBE(type) Maybe##type
+#define J_PAIR(ft, st) Pair_##ft##_##st
+#define J_LIST(type) type * _Nullable
+
+#define _J_STAMP_PAIR(ft, st) \
+typedef struct Pair_##ft##_##st { \
+    ft first;                 \
+    st second;                \
+} Pair_##ft##_##st
+
+typedef struct Maybe {
+    bool is_present;
+    void *value;
+} Maybe;
+
+#define _J_STAMP_MAYBE(type) \
+typedef struct Maybe ## type { \
+    bool is_present;         \
+    type value;              \
+} Maybe##type
+
+// Mark: - Pair
+#define j_pair(ft, st) J_PAIR(ft, st)
+
+#define _j_stamp_pair(ft, st) _J_STAMP_PAIR(ft, st)
+#define _j_stamp_maybe(type) _J_STAMP_MAYBE(type)
+
+_j_stamp_pair(u32, u32);
+
+_j_stamp_pair(Str, Str);
+
+// MARK: - Maybe
+_j_stamp_maybe(Str);
+_j_stamp_maybe(SubStr);
+_j_stamp_maybe(u32);
+
+_j_stamp_maybe(j_pair(Str, Str));
+
+#define j_maybe(type) J_MAYBE(type)
+
 
 typedef Str IStr;
 
@@ -109,6 +126,7 @@ void __attribute__((overloadable)) print(char *_Nonnull format, ...);
 void __attribute__((overloadable)) print(const Str format, ...);
 
 bool str_eq(const Str a, const Str b);
+bool str_start_with(const Str str, const Str prefix);
 const Str str_concat(const Str a, const Str b);
 Str str_from_cstr(const char * _Nonnull cstr);
 Str_View str_view(Str *str);
@@ -121,12 +139,186 @@ const Str __attribute__((overloadable)) str_format(const Str format, ...);
 
 void str_register(const char * _Nonnull format, const Str (* _Nonnull printer)(va_list * _Nonnull args));
 
-#define cast(type, value) ((type)(value))
-#define JASSERT(condition, message) (assert(condition && message))
-#define jassert(condition, message) (JASSERT(condition, message))
+
+/**
+ * @brief Returns a substring from the start of the substring up to and including the specified position
+ * Precondition: The position must be less than the length of the substring
+ */
+SubStr j_ss_prefix_through(SubStr ss, u32 n);
+/**
+ * @brief Returns a substring from the start of the substring up to, but not including, the specified position
+ * Precondition: The position must be less than the length of the substring
+ */
+SubStr j_ss_prefix_up_to(SubStr ss, u32 n);
+
+/**
+ * @brief Returns a substring containing all but the first element
+ */
+SubStr j_ss_drop_first(SubStr ss);
+/**
+ * @brief Returns a substring containing all but the first n elements
+ * @param ss The substring
+ * @param n The first n elements to drop
+ * @return The resulting substring
+ */
+SubStr j_ss_drop_first_n(SubStr ss, u32 n);
+/**
+ * @brief Remove and return the first element from the substring
+ */
+char j_ss_remove_first(SubStr *ss);
+/**
+ * @brief Remove the first n elements from the substring
+ */
+void j_ss_remove_first_n(SubStr *ss, u32 n);
+/**
+ * @brief returns the first index of the character in the substring
+ */
+Maybeu32 j_ss_first_index_of_c(SubStr ss, char c);
+/**
+ * @brief returns the first index of the string in the substring
+ */
+Maybeu32 j_ss_first_index_of_str(SubStr ss, Str needle);
+
+/**
+ * @brief Returns the substring up to, but not including, the seperator and removes it from the substring
+ * @param ss The SubString
+ * @param seperator The seperator to split on
+ * @return The substring up to the seperator.
+ */
+MaybeSubStr j_ss_split_on_first_str(SubStr *ss, Str seperator);
+
+/**
+ * @brief Removes the whitespace from the front of the substring.
+ * @param ss
+ */
+void j_ss_trim_front_whitespace(SubStr *ss);
+
+
+
 #endif
 #ifdef JLIB_IMPL
 
+// MARK: - SubString implementation
+
+SubStr j_ss_drop_first(SubStr ss) {
+    assert(ss.str.len > 0);
+    ss.str.str++;
+    ss.str.len--;
+    return ss;
+}
+
+SubStr j_ss_drop_first_n(SubStr ss, u32 n) {
+    assert(ss.str.len >= n);
+    ss.str.str += n;
+    ss.str.len -= n;
+    return ss;
+}
+
+char j_ss_remove_first(SubStr *ss) {
+    ss->str.str++;
+    ss->str.len--;
+    return *(ss->str.str - 1);
+}
+
+void j_ss_remove_first_n(SubStr *ss, u32 n) {
+    jassert(ss->str.len >= n, "Precondition: The number of elements to remove must be less than the length of the substring\n");
+    ss->str.str += n;
+    ss->str.len -= n;
+}
+
+/**
+ * @brief Skips the elements from the substring that satisfies the predicate
+ */
+#define j_ss_remove_while(ss, pred) do { \
+    char j_ss_it;                                   \
+    while ((ss)->str.len > 0 && (j_ss_it = *(ss)->str.str, (pred))) { \
+        j_ss_remove_first(ss);                                  \
+    }\
+} while(0)
+
+Maybeu32 j_ss_first_index_of_c(SubStr ss, char c) {
+    u32 j_ss_index = 0;
+    while (ss.str.str[j_ss_index] != c) {
+        j_ss_index++;
+        if (ss.str.len == j_ss_index)
+            return (Maybeu32) { .is_present = false };
+    }
+    return (Maybeu32) { .is_present = true, .value = j_ss_index };
+}
+
+Maybeu32 j_ss_first_index_of_str(SubStr ss, Str needle) {
+    if (ss.str.len < needle.len || ss.str.len == 0)
+        return (Maybeu32) { .is_present = false };
+    u32 index = 0;
+    while (str_start_with(j_ss_prefix_through(ss, needle.len).str, needle) == false) {
+        index++;
+        ss.str.str++;
+        ss.str.len--;
+        if (ss.str.len < needle.len)
+            return (Maybeu32) { .is_present = false };
+    }
+    return (Maybeu32) { .is_present = true, .value = index };
+}
+
+/**
+ * @brief returns the first index where the predicate is true
+ */
+#define j_ss_first_index_where(ss, pred) ({ \
+    Str j_ss_it = (ss).str; \
+    u32 j_ss_index = 0; \
+    while (j_ss_index < (ss).str.len && !(pred)) { \
+        j_ss_index++;                       \
+        j_ss_it.str++;                      \
+        j_ss_it.len--;                      \
+    } \
+    j_ss_index; \
+})
+
+SubStr j_ss_prefix_up_to(SubStr ss, u32 n) {
+    jassert(n > 1 && n <= ss.str.len, "Precondition: The position must not be larger than the length of the substring\n");
+    ss.str.len = n-1;
+    return ss;
+}
+
+SubStr j_ss_prefix_through(SubStr ss, u32 n) {
+//    jassert(n <= ss.str.len, "Precondition: The position must be less than the length of the substring\n");
+    if (ss.str.len == 0) return ss;
+    ss.str.len = n;
+    return ss;
+}
+
+/**
+ * @brief Returns a substring from the start of the substring up until the predicate returns false.
+ */
+#define j_ss_prefix_while(ss, pred) ({ \
+    SubStr temp = (ss);                \
+    temp.str.len = 0;                  \
+    char j_ss_it;                      \
+    while (temp.str.len < (ss).str.len && (j_ss_it = temp.str.str[temp.str.len], (pred))) { \
+        temp.str.len++;                \
+    }                                  \
+    temp;                              \
+})
+
+/**
+ * @brief resets the SubString to the original String
+ */
+#define j_ss_reset(ss) (ss).str = *(ss).base
+
+MaybeSubStr j_ss_split_on_first_str(SubStr *ss, Str seperator) {
+    Maybeu32 mindex = j_ss_first_index_of_str(*ss, seperator);
+    if (mindex.is_present == false)
+        return (MaybeSubStr) { .is_present = false };
+    u32 index = mindex.value;
+    SubStr line = j_ss_prefix_up_to(*ss, index + seperator.len);
+    j_ss_remove_first_n(ss, index + seperator.len);
+
+    return (MaybeSubStr) { .is_present = true, .value = line };
+}
+
+void j_ss_trim_front_whitespace(SubStr *ss) {
+    j_ss_remove_while(ss, j_ss_it == ' ' || j_ss_it == '\n' || j_ss_it == '\r' || j_ss_it == '\t');
+}
 // MARK: - Argument Parser
 
 // MARK: - FileSystem
@@ -162,6 +354,8 @@ typedef struct FS_Entry {
     struct dirent * _Nullable dirent;
 } FS_Entry;
 
+_j_stamp_maybe(FS_Walker);
+_j_stamp_maybe(FS_Entry);
 // MARK: - Bit Field
 
 #define j_bit_set(field, bit) ((field) |= (cast(typeof(field), 1) << (bit)))
@@ -171,46 +365,7 @@ typedef struct FS_Entry {
 
 // MARK: - Basic Data Structures Stamps
 
-#define EXPAND(x) x
-#define CONCAT(x, y) x ## y
-#define J_MAYBE(type) Maybe##type
-#define J_PAIR(ft, st) Pair_##ft##_##st
-#define J_LIST(type) type * _Nullable
 
-#define _J_STAMP_PAIR(ft, st) \
-typedef struct Pair_##ft##_##st { \
-    ft first;                 \
-    st second;                \
-} Pair_##ft##_##st
-
-typedef struct Maybe {
-    bool is_present;
-    void *value;
-} Maybe;
-
-#define _J_STAMP_MAYBE(type) \
-typedef struct Maybe ## type { \
-    bool is_present;         \
-    type value;              \
-} Maybe##type
-
-// Mark: - Pair
-#define j_pair(ft, st) J_PAIR(ft, st)
-
-#define _j_stamp_pair(ft, st) _J_STAMP_PAIR(ft, st)
-#define _j_stamp_maybe(type) _J_STAMP_MAYBE(type)
-
-_j_stamp_pair(u32, u32);
-_j_stamp_pair(Str, Str);
-
-// MARK: - Maybe
-_j_stamp_maybe(Str);
-_j_stamp_maybe(u32);
-_j_stamp_maybe(FS_Walker);
-_j_stamp_maybe(FS_Entry);
-_j_stamp_maybe(j_pair(Str, Str));
-
-#define j_maybe(type) J_MAYBE(type)
 
 //TODO: William Also do a j_view(type)
 
@@ -980,6 +1135,18 @@ bool str_eq(Str a, Str b) {
     }
     for (u32 i = 0; i < a.len; i++) {
         if (a.str[i] != b.str[i]) {
+            return 0;
+        }
+    }
+    return 1;
+}
+
+bool str_start_with(const Str str, const Str prefix) {
+    if (str.len < prefix.len) {
+        return 0;
+    }
+    for (u32 i = 0; i < prefix.len; i++) {
+        if (str.str[i] != prefix.str[i]) {
             return 0;
         }
     }

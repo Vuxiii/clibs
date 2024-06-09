@@ -366,8 +366,40 @@ int hmap_test(int argc, char **argv) {
 
 int main(void) {
 
-    print("{str}{str}", str_from_cstr("Hello"), str_from_cstr(" World\n"));
+    Str input = str_from_cstr("   \t        Hello, World, This, is, a, test");
 
+    SubStr sub = { .base = &input, .str = input };
+
+    print("The first instance of the letter 'H' is at index {u32}\n", j_ss_first_index_of_c(sub, 'H'));
+
+    j_ss_remove_while(&sub, j_ss_it == ' ');
+
+    print("The substring is '{str}'\n", sub.str);
+    j_ss_reset(sub);
+
+    j_ss_trim_front_whitespace(&sub);
+    print("The substring is '{str}'\n", sub.str);
+
+    print("The first instance of the letter 'H' is at index {u32}\n", j_ss_first_index_of_c(sub, 'H'));
+
+    Str search_for_me = str_from_cstr("This");
+    print("The word '{str}' appears at index {u32}\n", search_for_me, j_ss_first_index_where(sub, str_start_with(j_ss_it, search_for_me) == true));
+    print("{str}\n", sub.str);
+
+    j_ss_reset(sub);
+
+    print("The prefix of spaces is is:'{str}'\n", j_ss_prefix_while(sub, j_ss_it == ' ').str);
+
+    Str csvInput = str_from_cstr("William,Juhl,24,Odense\nMarcell,Klitten,28,Odense\n");
+    SubStr csvSub = { .base = &csvInput, .str = csvInput };
+    j_maybe(SubStr) field;
+    j_maybe(SubStr) line;
+    while ((line = j_ss_split_on_first_str(&csvSub, str_from_cstr("\n"))).is_present == true) {
+        while ((field = j_ss_split_on_first_str(&line.value, str_from_cstr(","))).is_present == true) {
+            print("{str}|", field.value.str);
+        }
+        print("\n");
+    }
     return 0;
 }
 
