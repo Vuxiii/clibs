@@ -42,8 +42,8 @@ ArgParser j_parser_init(char *program, char *program_description, int argc, char
 
 u32 j_arg_option(ArgParser *parser, char *flag, char *alternate, char *description) {
     assert(j_al_len(parser->flags) < 32);
-    Str flags = str_concat(str_from_cstr("-"), str_from_cstr(flag));
-    Str alt = str_concat(str_from_cstr("--"), str_from_cstr(alternate));
+    Str flags = str_concat(str_from_lit("-"), str_from_lit(flag));
+    Str alt = str_concat(str_from_lit("--"), str_from_lit(alternate));
     j_al_append(parser->flags, flags);
     j_al_append(parser->alternates, alt);
     j_al_append(parser->descriptions, str_from_cstr(description));
@@ -169,8 +169,8 @@ bool j_fs_walk_open_folder(FS_Walker *walker, Str folder) {
     j_al_append(walker->open_directories, ((FS_Dir) { .dir = dir, .remaining_entries = 0 }) );
     // Count the number of entries in the folder.
     if (j_bit_check(walker->options, J_FS_WALK_COUNT_FOLDER_ENTRIES)) {
-        Str dot = str_from_cstr(".");
-        Str dotdot = str_from_cstr("..");
+        Str dot = str_from_lit(".");
+        Str dotdot = str_from_lit("..");
         struct dirent *entry = NULL;
         u32 count = 0;
         while ((entry = readdir(dir)) != NULL) {
@@ -200,8 +200,8 @@ j_maybe(FS_Entry) j_fs_walk_next(FS_Walker *walker) {
     if (j_bit_check(walker->options, J_FS_WALK_COUNT_FOLDER_ENTRIES)) {
         j_al_last(walker->open_directories).remaining_entries--;
     }
-    Str dot = str_from_cstr(".");
-    Str dotdot = str_from_cstr("..");
+    Str dot = str_from_lit(".");
+    Str dotdot = str_from_lit("..");
     u32 parent_index = j_al_len(walker->open_directories) - 1;
     do {
         dir = readdir(j_al_last(walker->open_directories).dir);
@@ -300,17 +300,17 @@ int hmap_test(int argc, char **argv) {
     printf("The address of our map is %p\n", map);
     // Perhaps we can also do, _j_hmap_init(Str, Str, map); -> j_hmap(Str, Str) map = j_hmap_init(Str, Str);
 
-    Str key1 = str_from_cstr("key1");
-    Str value = str_from_cstr("value1");
+    Str key1 = str_from_lit("key1");
+    Str value = str_from_lit("value1");
 
-    Str key2 = str_from_cstr("Some awesome String Key");
-    Str value2 = str_from_cstr("Some awesome String Value");
+    Str key2 = str_from_lit("Some awesome String Key");
+    Str value2 = str_from_lit("Some awesome String Value");
 
-    Str key3 = str_from_cstr("Some key");
-    Str value3 = str_from_cstr("Some value");
+    Str key3 = str_from_lit("Some key");
+    Str value3 = str_from_lit("Some value");
 
-    Str key4 = str_from_cstr("Yet another key way");
-    Str value4 = str_from_cstr("Yet another value");
+    Str key4 = str_from_lit("Yet another key way");
+    Str value4 = str_from_lit("Yet another value");
 
 
 
@@ -321,7 +321,7 @@ int hmap_test(int argc, char **argv) {
 
     Str stored1 = j_hmap_get(map, key1);
     print("{str} -> {str}\n", key1, stored1);
-    j_hmap_put(map, key1, str_from_cstr("We just updated the value of key1 to this"));
+    j_hmap_put(map, key1, str_from_lit("We just updated the value of key1 to this"));
     stored1 = j_hmap_get(map, key1);
     print("{str} -> {str}\n", key1, stored1);
     Str stored2 = j_hmap_get(map, key2);
@@ -366,7 +366,7 @@ int hmap_test(int argc, char **argv) {
 
 int main(void) {
 
-    Str input = str_from_cstr("   \t        Hello, World, This, is, a, test");
+    Str input = str_from_lit("   \t        Hello, World, This, is, a, test");
 
     SubStr sub = { .base = &input, .str = input };
 
@@ -382,7 +382,7 @@ int main(void) {
 
     print("The first instance of the letter 'H' is at index {u32}\n", j_ss_first_index_of_c(sub, 'H'));
 
-    Str search_for_me = str_from_cstr("This");
+    Str search_for_me = str_from_lit("This");
     print("The word '{str}' appears at index {u32}\n", search_for_me, j_ss_first_index_where(sub, str_start_with(j_ss_it, search_for_me) == true));
     print("{str}\n", sub.str);
 
@@ -390,12 +390,12 @@ int main(void) {
 
     print("The prefix of spaces is is:'{str}'\n", j_ss_prefix_while(sub, j_ss_it == ' ').str);
 
-    Str csvInput = str_from_cstr("William,Juhl,24,Odense\nMarcell,Klitten,28,Odense\n");
+    Str csvInput = str_from_lit("William,Juhl,24,Odense\nMarcell,Klitten,28,Odense\n");
     SubStr csvSub = { .base = &csvInput, .str = csvInput };
     j_maybe(SubStr) field;
     j_maybe(SubStr) line;
-    while ((line = j_ss_split_on_first_str(&csvSub, str_from_cstr("\n"))).is_present == true) {
-        while ((field = j_ss_split_on_first_str(&line.value, str_from_cstr(","))).is_present == true) {
+    while ((line = j_ss_split_on_first_str(&csvSub, str_from_lit("\n"))).is_present == true) {
+        while ((field = j_ss_split_on_first_str(&line.value, str_from_lit(","))).is_present == true) {
             print("{str}|", field.value.str);
         }
         print("\n");
@@ -476,8 +476,8 @@ int tree(int argc, char **argv) {
     j_bit_set(walk_options, J_FS_WALK_COUNT_FOLDER_ENTRIES);
 
 
-    Str dot = str_from_cstr(".");
-    Str dotdot = str_from_cstr("..");
+    Str dot = str_from_lit(".");
+    Str dotdot = str_from_lit("..");
     j_maybe(FS_Walker) mwalker = j_fs_walk(dot, walk_options);
     if (mwalker.is_present == false) {
         print("Path does not exist\n");
@@ -486,10 +486,10 @@ int tree(int argc, char **argv) {
 
     FS_Walker walker = mwalker.value;
 
-    Str T     = str_from_cstr("├── ");
-    Str pipe  = str_from_cstr("│   ");
-    Str end   = str_from_cstr("└── ");
-    Str space = str_from_cstr("    ");
+    Str T     = str_from_lit("├── ");
+    Str pipe  = str_from_lit("│   ");
+    Str end   = str_from_lit("└── ");
+    Str space = str_from_lit("    ");
 
     Str *prefix = EMPTY_ARRAY;
     bool first_iter = true;

@@ -28,28 +28,6 @@ typedef double f64;
 
 // ======= STRING LIBRARY =======
 
-
-// MARK: - Str View
-
-#define _j_str_view_base_end(view) ((view)->base->str + (view)->base->len)
-#define _j_str_view_end(view) ((view)->current.str + (view)->current.len)
-#ifdef J_STR_VIEW_SHOULD_CLAMP
-#define _j_str_view_clamp(view) ((view).current.str = _j_str_view_end(view) > _j_str_view_base_end(view) ? (view).base->str + (view).base->len - (view).current.len : (view).current.str)
-#else
-#define _j_str_view_clamp(view) ((void)0)
-#endif
-#define j_str_view_set_width(view, n) ((view)->current.len = (n), _j_str_view_clamp(view))
-#define j_str_view_reset(view) ((view)->current = *(view)->base)
-#define j_str_view_advance(view, n) ((view)->current.str += (n), _j_str_view_clamp(view), &(view)->current)
-#define j_str_view_next(view) ((view)->current.str++, &(view)->current)
-#define j_str_view_prev(view) ((view)->current.str--, &(view)->current)
-#define j_str_view_at(view, n) ((view)->current.str[n])
-#define j_str_view_eq(view, str) (str_eq((view)->current, str))
-#define j_str_view_eq_cstr(view, cstr) (str_eq((view)->current, str_from_cstr(cstr)))
-#define j_str_view_current(view) (&((view)->current))
-#define j_str_view_has_next(view) (_j_str_view_end(view) <= _j_str_view_base_end(view))
-#define j_str_view_has_next_n(view, n) (_j_str_view_end(view) + (n) <= _j_str_view_base_end(view))
-
 #define j_list(type) type * _Nullable
 
 #define cast(type, value) ((type)(value))
@@ -62,10 +40,9 @@ typedef struct Str {
     u32 len;
 } Str;
 
-typedef struct Str_View {
-    const Str * _Nonnull base;
-    Str current;
-} Str_View;
+#define str_from_lit(cstr) ((Str) { .str = cstr, .len = sizeof(cstr) - 1})
+#define str_from_cstr(cstr) ((Str) { .str = cstr, .len = strlen(cstr) })
+
 
 typedef struct SubStr {
     const Str * _Nonnull base;
@@ -127,11 +104,9 @@ void __attribute__((overloadable)) print(const Str format, ...);
 
 bool str_eq(const Str a, const Str b);
 bool str_start_with(const Str str, const Str prefix);
-const Str str_concat(const Str a, const Str b);
-Str str_from_cstr(const char * _Nonnull cstr);
-Str_View str_view(Str *str);
-bool str_a_contains_b(const Str a, const Str b);
-
+const Str str_concat(const Str prefix, const Str suffix);
+//Str str_from_cstr(const char * _Nonnull cstr);
+bool str_contains(const Str hay, const Str needle);
 Str str_build_from_arraylist( const j_list(Str) list );
 
 const Str __attribute__((overloadable)) str_format(char * _Nonnull format, ...);
@@ -557,135 +532,6 @@ u64 j_hmap_hash_str(const void *key, size_t len) {
 
 // MARK: - Red Black Tree
 
-
-
-
-// MARK: - Regex
-
-typedef struct Regex_Edge {
-    i32 c: 8;           // Some character
-    u32 is_wildcard: 1; // .
-    u32 is_optional: 1; // ?
-    u32 is_plus: 1;     // +
-    u32 is_star: 1;     // *
-    u32 is_union: 1;    // |
-    u32 is_digit: 1;    // \d [:digit:] [0-9]
-    u32 is_alpha: 1;    // \w [:alpha:] [a-zA-Z]
-    u32 is_alnum: 1;    //    [:alnum:] [a-zA-Z0-9]
-    u32 is_space: 1;    // \s [:space:] [ \t\n\r\f\v]
-    u32 is_lower: 1;    // \l [:lower:] [a-z]
-    u32 is_upper: 1;    // \u [:upper:] [A-Z]
-
-    // For implementation...
-    u32 _is_epsilon: 1;
-} Regex_Edge;
-typedef u32 Vertex_Descriptor;
-
-_j_stamp_pair(Regex_Edge, Vertex_Descriptor);
-
-typedef struct Regex_Vertex {
-    j_list(j_pair(Regex_Edge, Vertex_Descriptor)) edges;
-} Regex_Vertex;
-
-typedef struct Regex {
-    j_list(Regex_Edge) edges;
-    j_list(Regex_Vertex) vertices;
-    j_list(Vertex_Descriptor) accepting_states;
-    Vertex_Descriptor start_state;
-    Vertex_Descriptor current_state;
-} Regex;
-
-_j_stamp_maybe(Regex);
-
-
-j_maybe(Regex) j_regex(Str pattern);
-bool j_regex_tokenize_next(j_list(Regex_Edge) *tokens, Str_View *pattern);
-
-bool j_regex_tokenize_next(j_list(Regex_Edge) *tokenss, Str_View *pattern) {
-    if (j_str_view_has_next(pattern) == false) {
-        return false;
-    }
-    j_list(Regex_Edge) tokens = *tokenss;
-    if (j_str_view_eq_cstr(pattern, ".")) {
-        j_al_append(tokens, (Regex_Edge) {.is_wildcard = true});
-    } else if (j_str_view_eq_cstr(pattern, "|")) {
-        j_al_append(tokens, (Regex_Edge) {.is_union = true});
-    } else if (j_str_view_eq_cstr(pattern, "*")) {
-        j_al_append(tokens, (Regex_Edge) {.is_star = true});
-    } else if (j_str_view_eq_cstr(pattern, "+")) {
-        j_al_append(tokens, (Regex_Edge) {.is_plus = true});
-    } else if (j_str_view_eq_cstr(pattern, "?")) {
-        j_al_append(tokens, (Regex_Edge) {.is_optional = true});
-    } else if (j_str_view_eq_cstr(pattern, "\\")) {
-        j_str_view_set_width(pattern, 2);
-        if (j_str_view_eq_cstr(pattern, "\\d")) {
-            j_al_append(tokens, (Regex_Edge) {.is_digit = true});
-        } else if (j_str_view_eq_cstr(pattern, "\\w")) {
-            j_al_append(tokens, (Regex_Edge) {.is_alpha = true});
-        } else if (j_str_view_eq_cstr(pattern, "\\s")) {
-            j_al_append(tokens, (Regex_Edge) {.is_space = true});
-        } else if (j_str_view_eq_cstr(pattern, "\\l")) {
-            j_al_append(tokens, (Regex_Edge) {.is_lower = true});
-        } else if (j_str_view_eq_cstr(pattern, "\\u")) {
-            j_al_append(tokens, (Regex_Edge) {.is_upper = true});
-        } else if (j_str_view_eq_cstr(pattern, "\\.")) {
-            j_al_append(tokens, (Regex_Edge) {.c = '.'});
-        } else if (j_str_view_eq_cstr(pattern, "\\|")) {
-            j_al_append(tokens, (Regex_Edge) {.c = '|'});
-        } else if (j_str_view_eq_cstr(pattern, "\\*")) {
-            j_al_append(tokens, (Regex_Edge) {.c = '*'});
-        } else if (j_str_view_eq_cstr(pattern, "\\+")) {
-            j_al_append(tokens, (Regex_Edge) {.c = '+'});
-        } else if (j_str_view_eq_cstr(pattern, "\\?")) {
-            j_al_append(tokens, (Regex_Edge) {.c = '?'});
-        } else {
-            jassert(false, "Unknown escape sequence\n");
-        }
-        j_str_view_next(pattern);
-        j_str_view_set_width(pattern, 1);
-    } else {
-        char c = j_str_view_current(pattern)->str[0];
-        j_al_append(tokens, (Regex_Edge) {.c = c });
-    }
-    j_str_view_next(pattern);
-    *tokenss = tokens;
-    return true;
-}
-
-MaybeRegex j_regex(Str pattern) {
-
-    //TODO: William Fix this macro text subst....
-    j_list(Regex_Edge) tokens = EMPTY_ARRAY;
-
-    Str_View view = str_view(&pattern);
-    j_str_view_set_width(&view, 1);
-
-    Regex re = {
-            .edges = EMPTY_ARRAY,
-            .vertices = EMPTY_ARRAY,
-            .accepting_states = EMPTY_ARRAY,
-            .start_state = 0,
-            .current_state = 0,
-    };
-
-    bool success;
-    Vertex_Descriptor previous;
-    while ((success = j_regex_tokenize_next(&tokens, &view)) == true) {
-
-        Regex_Edge edge = j_al_last(tokens);
-        Regex_Vertex vertex = {
-                .edges = EMPTY_ARRAY
-        };
-
-        j_al_append(re.edges, edge);
-        j_al_append(re.vertices, vertex);
-
-        previous = j_al_len(re.vertices) - 1;
-    }
-
-    return (MaybeRegex) { .is_present = false };
-}
-
 static j_list(FormatOption) options = EMPTY_ARRAY;
 
 void str_register(const char * _Nonnull format, const Str (* _Nonnull printer)(va_list * _Nonnull args)) {
@@ -697,7 +543,7 @@ static const Str i32_Printer(va_list * _Nonnull args) {
     u32 len = 0;
     i32 temp = number;
     if (number == 0) {
-        return str_from_cstr("0");
+        return str_from_lit("0");
     }
     if (temp < 0) {
         len++;
@@ -754,7 +600,7 @@ static const Str i64_Printer(va_list * _Nonnull args) {
     u32 len = 0;
     i64 temp = number;
     if (number == 0) {
-        return str_from_cstr("0");
+        return str_from_lit("0");
     }
     if (temp < 0) {
         len++;
@@ -828,7 +674,7 @@ static const Str f32_Printer(va_list * _Nonnull args) {
         u32 len = 0;
         i64 temp = int_part;
         if (temp == 0) {
-            int_str = str_from_cstr("0");
+            int_str = str_from_lit("0");
         } else {
             if (temp < 0) {
                 len++;
@@ -860,7 +706,7 @@ static const Str f32_Printer(va_list * _Nonnull args) {
         u32 len = 1 + frac_len;
         i64 temp = frac_part_i32;
         if (number == 0) {
-            frac_str = str_from_cstr("0");
+            frac_str = str_from_lit("0");
         } else {
             if (temp < 0) {
                 temp = -temp;
@@ -886,7 +732,7 @@ static const Str f32_Printer(va_list * _Nonnull args) {
         }
     }
 
-    const Str dot_str = str_from_cstr(".");
+    const Str dot_str = str_from_lit(".");
     const Str out = str_concat(int_str, str_concat(dot_str, frac_str));
     return out;
 }
@@ -913,7 +759,7 @@ static const Str f64_Printer(va_list * _Nonnull args) {
         u32 len = 0;
         i64 temp = int_part;
         if (temp == 0) {
-            int_str = str_from_cstr("0");
+            int_str = str_from_lit("0");
         } else {
             if (temp < 0) {
                 len++;
@@ -945,7 +791,7 @@ static const Str f64_Printer(va_list * _Nonnull args) {
         u32 len = 1 + frac_len;
         i64 temp = frac_part_i32;
         if (number == 0) {
-            frac_str = str_from_cstr("0");
+            frac_str = str_from_lit("0");
         } else {
             if (temp < 0) {
                 temp = -temp;
@@ -971,7 +817,7 @@ static const Str f64_Printer(va_list * _Nonnull args) {
         }
     }
 
-    const Str dot_str = str_from_cstr(".");
+    const Str dot_str = str_from_lit(".");
     const Str out = str_concat(int_str, str_concat(dot_str, frac_str));
     return out;
 }
@@ -979,9 +825,9 @@ static const Str f64_Printer(va_list * _Nonnull args) {
 static const Str bool_Printer(va_list * _Nonnull args) {
     bool i = va_arg(*args, u32);
     if (i) {
-        return str_from_cstr("true");
+        return str_from_lit("true");
     } else {
-        return str_from_cstr("false");
+        return str_from_lit("false");
     }
 }
 
@@ -1087,47 +933,19 @@ void __attribute__((overloadable)) print(const Str format, ...) {
     va_end(args);
 }
 
-const Str str_concat(const Str a, const Str b) {
-    u32 len = a.len + b.len;
+const Str str_concat(const Str prefix, const Str suffix) {
+    u32 len = prefix.len + suffix.len;
     char *str = (char*)malloc(len + 1);
-    for (u32 i = 0; i < a.len; i++) {
-        str[i] = a.str[i];
+    for (u32 i = 0; i < prefix.len; i++) {
+        str[i] = prefix.str[i];
     }
-    for (u32 i = 0; i < b.len; i++) {
-        str[a.len + i] = b.str[i];
+    for (u32 i = 0; i < suffix.len; i++) {
+        str[prefix.len + i] = suffix.str[i];
     }
     str[len] = '\0';
     Str c = {str, len};
     return c;
 }
-
-
-/**
- * @brief Constructs and owns a Str from a c-string.
- * @param cstr The c-string to construct the Str from.
- * @return The constructed Str.
- */
-Str str_from_cstr(const char * _Nonnull cstr) {
-    //TODO: (William) We can use sizeof(cstr) here.
-    size_t len = strlen(cstr);
-    char *p = (char *)malloc(len + 1);
-    jassert(p, "Failed to allocate memory for string.");
-    strncpy(p, cstr, len);
-    return (Str) {.str = p, .len = len};
-}
-
-/**
- * @brief Constructs a non-owning View of a Str.
- * @param str The Str to construct the Str_View from.
- * @return The constructed Str_View.
- */
-Str_View str_view(Str *str) {
-    return (Str_View) {
-        .base = str,
-        .current = *str
-    };
-}
-
 
 bool str_eq(Str a, Str b) {
     if (a.len != b.len) {
@@ -1153,14 +971,14 @@ bool str_start_with(const Str str, const Str prefix) {
     return 1;
 }
 
-bool str_a_contains_b(Str a, Str b) {
-    if (a.len < b.len) {
+bool str_contains(const Str hay, const Str needle) {
+    if (hay.len < needle.len) {
         return 0;
     }
-    for (u32 i = 0; i < a.len - b.len; i++) {
+    for (u32 i = 0; i < hay.len - needle.len; i++) {
         bool found = 1;
-        for (u32 j = 0; j < b.len; j++) {
-            if (a.str[i + j] != b.str[j]) {
+        for (u32 j = 0; j < needle.len; j++) {
+            if (hay.str[i + j] != needle.str[j]) {
                 found = 0;
                 break;
             }
