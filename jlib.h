@@ -92,6 +92,12 @@ _j_stamp_maybe(j_pair(Str, Str));
 #define j_maybe(type) J_MAYBE(type)
 
 
+#define if_let(unwrap_name, maybe_val, block) if ((maybe_val).is_present == true) { typeof((maybe_val).value) unwrap_name = (maybe_val).value; block }
+#define if_let_expr(unwrap_name, maybe_val, expr, block) if ((maybe_val = (expr)).is_present == true) { typeof(maybe_val.value) unwrap_name = maybe_val.value; block }
+
+#define while_let(unwrap_name, maybe_val, block) while ((maybe_val).is_present == true) { typeof((maybe_val).value) unwrap_name = (maybe_val).value; block }
+#define while_let_expr(unwrap_name, maybe_val, expr, block) while ((maybe_val = (expr)).is_present == true) { typeof(maybe_val.value) unwrap_name = maybe_val.value; block}
+
 typedef Str IStr;
 
 typedef struct FormatOption {

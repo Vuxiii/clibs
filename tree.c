@@ -362,8 +362,6 @@ int hmap_test(int argc, char **argv) {
 
 
 
-
-
 int main(void) {
 
     Str input = str_from_lit("   \t        Hello, World, This, is, a, test");
@@ -391,18 +389,51 @@ int main(void) {
     print("The prefix of spaces is is:'{str}'\n", j_ss_prefix_while(sub, j_ss_it == ' ').str);
 
     Str csvInput = str_from_lit("William,Juhl,24,Odense\nMarcell,Klitten,28,Odense\n");
+
     SubStr csvSub = { .base = &csvInput, .str = csvInput };
     j_maybe(SubStr) field;
     j_maybe(SubStr) line;
     while ((line = j_ss_split_on_first_str(&csvSub, str_from_lit("\n"))).is_present == true) {
         while ((field = j_ss_split_on_first_str(&line.value, str_from_lit(","))).is_present == true) {
-            print("{str}|", field.value.str);
+            print("Field: '{str}'\n", field.value.str);
         }
         print("\n");
     }
+
+    {
+        j_ss_reset(csvSub);
+        j_maybe(SubStr) mline;
+        while_let_expr(line, mline, j_ss_split_on_first_str(&csvSub, str_from_lit("\n")), {
+            j_maybe(SubStr) mfield;
+            while_let_expr(field, mfield, j_ss_split_on_first_str(&line, str_from_lit(",")), {
+                print("Field: '{str}'\n", field.str);
+            })
+            print("\n");
+        })
+    }
+
+    {
+        Maybeu32 mindex = {.is_present = true, .value = 69 };
+        u32 index;
+        if (true) {
+
+        }
+    }
+    Maybeu32 mindex = {.is_present = true, .value = 69 };
+    if_let(index, mindex, {
+        print("{u32}\n", index);
+    }) else {
+        print("Nope\n");
+    }
+
+    if_let_expr(index, mindex, ((Maybeu32) { .is_present = true, .value = 69}), {
+        print("Never nicer method maybe. {u32}\n", index);
+    }) else {
+        print("Nope\n");
+    }
+
     return 0;
 }
-
 
 
 
