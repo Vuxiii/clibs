@@ -83,6 +83,7 @@ _j_stamp_pair(u32, u32);
 _j_stamp_pair(Str, Str);
 
 // MARK: - Maybe
+#define NIL { .is_present = false }
 _j_stamp_maybe(Str);
 _j_stamp_maybe(SubStr);
 _j_stamp_maybe(u32);

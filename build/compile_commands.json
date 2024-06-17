@@ -1,0 +1,8 @@
+[
+{
+  "directory": "/Users/not_archbtw/dev/c/libs/build",
+  "command": "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/cc   -g -std=gnu2x -arch arm64 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX14.5.sdk -o CMakeFiles/libs.dir/tree.c.o -c /Users/not_archbtw/dev/c/libs/tree.c",
+  "file": "/Users/not_archbtw/dev/c/libs/tree.c",
+  "output": "CMakeFiles/libs.dir/tree.c.o"
+}
+]
