@@ -428,156 +428,14 @@ int substring_Test(void) {
     return 0;
 }
 
-typedef struct Tripleu32u32u32 {
-    u32 first;
-    u32 second;
-    u32 third;
-} Tripleu32u32u32;
 
-typedef enum J_RB_COLOR {
-    J_RB_RED,
-    J_RB_BLACK,
-} J_RB_COLOR;
-
-_j_stamp_maybe(J_RB_COLOR);
-
-#define EMPTY_RB NULL
-typedef struct RBTreeHeader {
-    u32 len;
-    u32 cap;
-    j_maybe(u32) root;
-    // Below can be consolidated into a single array of structs.
-    j_maybe(u32) * _Nullable parent_for;
-    j_maybe(u32) * _Nullable left_child_for;
-    j_maybe(u32) * _Nullable right_child_for;
-    J_RB_COLOR * _Nullable color_for;
-        
-    // 0 -> Equal 
-    // - -> Left is less
-    // + -> Left is greater
-    i32 (*compare_func)(u32 lhs, u32 rhs); 
-} RBTreeHeader;
-
-#define j_rb(key, value) j_pair(key, value) * _Nullable
-#define j_rb_header(tree) (cast(RBTreeHeader *, tree)-1)
-#define j_rb_cap(tree) (tree ? (cast(RBTreeHeader *, tree)-1)->cap : 0)
-#define j_rb_len(tree) (tree ? (cast(RBTreeHeader *, tree)-1)->len : 0)
-#define j_rb_compare(tree, lhs, rhs) (j_rb_header(tree)->compare_func(lhs, rhs))
-#define j_rb_root(tree) (j_rb_header(tree)->root)
-#define j_rb_key(tree, descriptor) (tree[descriptor].first)
-#define j_rb_value(tree, descriptor) (tree[descriptor].second)
-#define j_rb_left(tree, descriptor) (j_rb_header(tree)->left_child_for[descriptor])
-#define _j_rb_left(tree, descriptor) (j_rb_header(tree)->left_child_for[descriptor].value)
-#define j_rb_right(tree, descriptor) (j_rb_header(tree)->right_child_for[descriptor])
-#define _j_rb_right(tree, descriptor) (j_rb_header(tree)->right_child_for[descriptor].value)
-#define j_rb_parent(tree, descriptor) (j_rb_header(tree)->parent_for[descriptor])
-#define _j_rb_parent(tree, descriptor) (j_rb_header(tree)->parent_for[descriptor].value)
-#define j_rb_color(tree, descriptor) (j_rb_header(tree)->color_for[descriptor])
-#define _j_rb_init(tree) ({   \
-    if ((tree) == EMPTY_RB) { \
-        u32 cap = 10;         \
-        (tree) = malloc(sizeof(RBTreeHeader) + sizeof(tree[0]) * cap) + sizeof(RBTreeHeader);\
-        j_rb_header(tree)->len = 0;  \
-        j_rb_header(tree)->cap = cap;\
-        j_rb_header(tree)->root = ((typeof(j_rb_header(tree)->root)) {.is_present = false});\
-        j_rb_header(tree)->parent_for = calloc(cap, sizeof(j_maybe(u32)));       \
-        j_rb_header(tree)->left_child_for = calloc(cap, sizeof(j_maybe(u32)));   \
-        j_rb_header(tree)->right_child_for = calloc(cap, sizeof(j_maybe(u32)));  \
-        j_rb_header(tree)->color_for = calloc(cap, sizeof(J_RB_COLOR)); \
-        j_rb_header(tree)->compare_func = j_rb_u32_comp;\
-    }                       \
-})
-
-#define j_rb_put(tree, key, val) ({ \
-    j_maybe(j_pair(u32, bool)) result = NIL; \
-    _j_rb_init(tree); \
-    \
-    j_maybe(u32) mcurrent = j_rb_root(tree); \
-    j_maybe(u32) mparent = {.is_present = false}; \
-    while_let(current, mcurrent, { \
-        mparent = mcurrent; \
-        i32 compare_result = j_rb_compare(tree, key, j_rb_key(tree, current)); \
-        if (compare_result == 0) { \
-            j_rb_value(tree, current) = (val); \
-            result.is_present = true; \
-            result.value.first = current; \
-            result.value.second = false; \
-            break; \
-        } else if (compare_result < 0) { \
-            mcurrent = j_rb_left(tree, current); \
-        } else { \
-            mcurrent = j_rb_right(tree, current); \
-        } \
-    }) \
-    if (result.is_present == false) { \
-        u32 current = j_rb_header(tree)->len++; \
-        mcurrent.is_present = true; \
-        mcurrent.value = current; \
-        tree[current] = (typeof(tree[0])) { .first = key, .second = (val) }; \
-        j_rb_parent(tree, current) = mparent; \
-        if_let(parent, mparent, { \
-            if (j_rb_compare(tree, key, j_rb_key(tree, parent)) < 0) { \
-                j_rb_left(tree, parent) = mcurrent; \
-            } else { \
-                j_rb_right(tree, parent) = mcurrent; \
-            } \
-        }) else { \
-            j_rb_header(tree)->root = mcurrent; \
-        } \
-        j_rb_color(tree, current) = J_RB_RED; \
-        _j_rb_insert_fixup(tree, current); \
-        result.value.first = current;\
-        result.value.second = true;\
-    } \
-    result.value; \
-})
-
-#define j_rb_find(tree, key) ({ \
-    j_maybe(u32) mcurrent = j_rb_root(tree); \
-    bool found = false; \
-    while_let(current, mcurrent, { \
-        i32 compare_result = j_rb_compare(tree, key, j_rb_key(tree, current)); \
-        if (compare_result == 0) { \
-            found = true; \
-            break; \
-        } else if (compare_result < 0) { \
-            mcurrent = j_rb_left(tree, current); \
-        } else { \
-            mcurrent = j_rb_right(tree, current); \
-        } \
-    }) \
-    mcurrent.is_present = found; \
-    mcurrent; \
-});
-#define _j_rb_is_left_sibling(tree, u) (j_rb_parent(tree, u).is_present && j_rb_left(tree, j_rb_parent(tree, u).value).is_present && j_rb_left(tree, j_rb_parent(tree, u).value).value == u)
-#define _j_rb_is_right_sibling(tree, u) (j_rb_parent(tree, u).is_present && j_rb_right(tree, j_rb_parent(tree, u).value).is_present && j_rb_right(tree, j_rb_parent(tree, u).value).value == u)
-#define _j_rb_left_sibling(tree, u) (j_rb_left(tree, j_rb_parent(tree, u).value))
-#define _j_rb_right_sibling(tree, u) (j_rb_right(tree, j_rb_parent(tree, u).value))
-#define _j_rb_grandparent(tree, u) (j_rb_parent(tree, j_rb_parent(tree, u).value).value)
-#define _j_rb_transplant(tree, u, v) ({ \
-    if (j_rb_parent(tree, u).is_present == false) { \
-        j_rb_root(tree) = ((j_maybe(u32)) { .is_present = true, .value = v }); \
-    } else if (_j_rb_is_left_sibling(tree, u)) { \
-        _j_rb_left_sibling(tree, u) = ((j_maybe(u32)) { .is_present = true, .value = v }); \
-    } else { \
-        _j_rb_right_sibling(tree, u) = ((j_maybe(u32)) { .is_present = true, .value = v }); \
-    } \
-    j_rb_parent(tree, v) = j_rb_parent(tree, u); \
-})
-
-
-void _j_rb_left_rotate(void *tree, u32 descriptor);
-void _j_rb_right_rotate(void *tree, u32 descriptor);
-void _j_rb_insert_fixup(void *tree, u32 descriptor);
-void _j_rb_delete_fixup(void *tree, u32 descriptor);
-void j_rb_delete(void *tree, u32 descriptor);
 
 i32 j_rb_u32_comp(u32 lhs, u32 rhs) {
     return lhs - rhs;
 }
 
-_j_stamp_pair(u32, bool);
-_j_stamp_maybe(j_pair(u32, bool));
+
+
 
 static const Str maybeu32_Printer(va_list * _Nonnull args) {
     j_maybe(u32) m = va_arg(*args, j_maybe(u32));
@@ -592,7 +450,8 @@ static const Str pair_u32bool_Printer(va_list * _Nonnull args) {
     return str_format("({u32}, {bool})", p.first, p.second);
 }
 
-int main(void) {
+int redblacktree_test(void) {
+
     str_register("{maybeu32}", maybeu32_Printer);
     str_register("{pair_u32bool}", pair_u32bool_Printer);
     // Red Black tree
@@ -696,197 +555,137 @@ int main(void) {
 
     return 0;
 }
+typedef struct StackAllocator {
+    u32 size;
+    u32 used;
+    void *memory;
+} StackAllocator;
 
-void j_rb_delete(void *tree, u32 descriptor) {
-    u32 y = descriptor;
-    u32 x;
-    J_RB_COLOR y_original_color = j_rb_color(tree, y);
-    if (j_rb_left(tree, descriptor).is_present == false) {
-        x = _j_rb_right(tree, descriptor);
-        _j_rb_transplant(tree, descriptor, x);
-    } else if (j_rb_right(tree, descriptor).is_present == false) {
-        x = _j_rb_left(tree, descriptor);
-        _j_rb_transplant(tree, descriptor, x);
-    } else {
-        y = _j_rb_right(tree, descriptor);
-        while (j_rb_left(tree, y).is_present) {
-            y = _j_rb_left(tree, y);
-        }
-        y_original_color = j_rb_color(tree, y);
-        x = _j_rb_right(tree, y);
-        if (_j_rb_parent(tree, y) == descriptor) {
-            _j_rb_parent(tree, x) = y;
-        } else {
-            _j_rb_transplant(tree, y, x);
-            _j_rb_right(tree, y) = _j_rb_right(tree, descriptor);
-            j_rb_parent(tree, _j_rb_right(tree, y)) = ((j_maybe(u32)) { .is_present = true, .value = y });
-        }
-        _j_rb_transplant(tree, descriptor, y);
-        j_rb_left(tree, y) = j_rb_left(tree, descriptor);
-        j_rb_parent(tree, _j_rb_left(tree, y)) = ((j_maybe(u32)) { .is_present = true, .value = y });
-        j_rb_color(tree, y) = j_rb_color(tree, descriptor);
+typedef struct PoolAllocator {
+    StackAllocator stack;
+    u32 block_size;
+} PoolAllocator;
+
+typedef struct ArenaFreeNode {
+    u32 size;
+    void *ptr;
+} ArenaFreeNode;
+
+typedef struct ArenaAllocator {
+    StackAllocator stack;
+    PoolAllocator free_stack;
+    j_list(void *) free_list;
+} ArenaAllocator;
+
+void *j_stack_alloc(StackAllocator *allocator, u32 size) {
+    jassert(allocator->used + size <= allocator->size, "Out of memory\n");
+    void *result = (u8 *)allocator->memory + allocator->used;
+    allocator->used += size;
+    return result;
+}
+
+void j_stack_clear(StackAllocator *allocator) {
+    allocator->used = 0;
+}
+
+void j_stack_free(StackAllocator *allocator, void *ptr, u32 size) {
+    if (ptr == NULL) {
+        return;
     }
-    if (y_original_color == J_RB_BLACK) {
-        _j_rb_delete_fixup(tree, x);
+    jassert(size <= allocator->used, "Trying to free more memory than allocated\n");
+    if (ptr + size == (u8 *)allocator->memory + allocator->used) {
+        allocator->used -= size;
     }
 }
 
-void _j_rb_left_rotate(void *tree, u32 descriptor) {
-    // We know y is present;
-    j_maybe(u32) y = j_rb_right(tree, descriptor);
-    j_maybe(u32) yleft = j_rb_left(tree, y.value);
-    j_rb_right(tree, descriptor) = yleft;
-
-    if_let(left, yleft, {
-        j_rb_parent(tree, left) = ((j_maybe(u32)) { .is_present = true, .value = descriptor});
-    })
-    j_rb_parent(tree, y.value) = j_rb_parent(tree, descriptor);
-    if (j_rb_parent(tree, descriptor).is_present == false) {
-        j_rb_root(tree) = y;
-    } else if (_j_rb_is_left_sibling(tree, descriptor)) {
-        j_rb_left(tree, j_rb_parent(tree, descriptor).value) = y;
-    } else {
-        j_rb_right(tree, j_rb_parent(tree, descriptor).value) = y;
-    }
-
-    j_rb_left(tree, y.value) = ((j_maybe(u32)) { .value = descriptor, .is_present = true });
-    j_rb_parent(tree, descriptor) = y;
+void *j_pool_alloc(PoolAllocator *allocator, u32 count) {
+    jassert(allocator->stack.used + count * allocator->block_size <= allocator->stack.size, "Out of memory\n");
+    void *result = (u8 *)allocator->stack.memory + allocator->stack.used;
+    allocator->stack.used += count * allocator->block_size;
+    return result;
 }
 
-void _j_rb_right_rotate(void *tree, u32 descriptor) {
-    // We know y is present;
-    j_maybe(u32) y = j_rb_left(tree, descriptor);
-    j_maybe(u32) yright = j_rb_right(tree, y.value);
-    j_rb_left(tree, descriptor) = yright;
-
-    if_let(right, yright, {
-        j_rb_parent(tree, right) = ((j_maybe(u32)) { .is_present = true, .value = descriptor});
-    }) 
-    j_rb_parent(tree, y.value) = j_rb_parent(tree, descriptor);
-    if (j_rb_parent(tree, descriptor).is_present == false) {
-        j_rb_root(tree) = y;
-    } else if (_j_rb_is_right_sibling(tree, descriptor)) {
-        j_rb_right(tree, j_rb_parent(tree, descriptor).value) = y;
-    } else {
-        j_rb_left(tree, j_rb_parent(tree, descriptor).value) = y;
-    }
-
-    j_rb_right(tree, y.value) = ((j_maybe(u32)) { .value = descriptor, .is_present = true });
-    j_rb_parent(tree, descriptor) = y;
+void j_pool_clear(PoolAllocator *allocator) {
+    allocator->stack.used = 0;
 }
 
-void _j_rb_insert_fixup(void *tree, u32 descriptor) {
-    while (j_rb_parent(tree, descriptor).is_present && j_rb_color(tree, _j_rb_parent(tree, descriptor)) == J_RB_RED) {        
-        j_maybe(u32) my;
-        if (_j_rb_parent(tree, descriptor) == _j_rb_left(tree, _j_rb_grandparent(tree, descriptor))) {
-            u32 y = _j_rb_right(tree, _j_rb_grandparent(tree, descriptor));
-            if (j_rb_color(tree, y) == J_RB_RED) {
-                j_rb_color(tree, _j_rb_parent(tree, descriptor)) = J_RB_BLACK;
-                j_rb_color(tree, y) = J_RB_BLACK;
-                j_rb_color(tree, _j_rb_grandparent(tree, descriptor)) = J_RB_RED;
-                descriptor = _j_rb_grandparent(tree, descriptor);
-            } else { 
-                if (_j_rb_is_right_sibling(tree, descriptor)) {
-                    descriptor = _j_rb_parent(tree, descriptor);
-                    _j_rb_left_rotate(tree, descriptor);
-                }
-                j_rb_color(tree, _j_rb_parent(tree, descriptor)) = J_RB_BLACK;
-                j_rb_color(tree, _j_rb_grandparent(tree, descriptor)) = J_RB_RED;
-                _j_rb_right_rotate(tree, _j_rb_grandparent(tree, descriptor));
-            }
-        } else  {
-            u32 y = _j_rb_left(tree, _j_rb_grandparent(tree, descriptor));
-            if (j_rb_color(tree, y) == J_RB_RED) {
-                j_rb_color(tree, _j_rb_parent(tree, descriptor)) = J_RB_BLACK;
-                j_rb_color(tree, y) = J_RB_BLACK;
-                j_rb_color(tree, _j_rb_grandparent(tree, descriptor)) = J_RB_RED;
-                descriptor = _j_rb_grandparent(tree, descriptor);
-            } else {
-                if (_j_rb_is_left_sibling(tree, descriptor)) {
-                    descriptor = _j_rb_parent(tree, descriptor);
-                    _j_rb_right_rotate(tree, descriptor);
-                }
-                j_rb_color(tree, _j_rb_parent(tree, descriptor)) = J_RB_BLACK;
-                j_rb_color(tree, _j_rb_grandparent(tree, descriptor)) = J_RB_RED;
-                _j_rb_left_rotate(tree, _j_rb_grandparent(tree, descriptor));
-            }
-        }
-
+void j_pool_free(PoolAllocator *allocator, void *ptr, u32 count) {
+    if (ptr == NULL) {
+        return;
     }
-    j_rb_color(tree, j_rb_root(tree).value) = J_RB_BLACK;
+    jassert(count * allocator->block_size <= allocator->stack.used, "Trying to free more memory than allocated\n");
+    if (ptr + count * allocator->block_size == (u8 *)allocator->stack.memory + allocator->stack.used) {
+        allocator->stack.used -= count * allocator->block_size;
+    }
 }
 
-void _j_rb_delete_fixup(void *tree, u32 descriptor) {
-    while (descriptor != j_rb_root(tree).value && j_rb_color(tree, descriptor) == J_RB_BLACK) {
-        j_maybe(u32) mparent = j_rb_parent(tree, descriptor);
-        if_let(parent, mparent, {
-            if (j_rb_left(tree, parent).is_present && descriptor == j_rb_left(tree, parent).value) {
-                j_maybe(u32) msibling = j_rb_right(tree, parent);
-                if_let(sibling, msibling, {
-                    if (j_rb_color(tree, sibling) == J_RB_RED) {
-                        j_rb_color(tree, sibling) = J_RB_BLACK;
-                        j_rb_color(tree, parent) = J_RB_RED;
-                        _j_rb_left_rotate(tree, parent);
-                        msibling = j_rb_right(tree, parent);
-                    }
-                    if_let(sibling, msibling, {
-                        if (j_rb_left(tree, sibling).is_present && j_rb_color(tree, j_rb_left(tree, sibling).value) == J_RB_BLACK &&
-                            j_rb_right(tree, sibling).is_present && j_rb_color(tree, j_rb_right(tree, sibling).value) == J_RB_BLACK) {
-                            j_rb_color(tree, sibling) = J_RB_RED;
-                            descriptor = parent;
-                        } else {
-                            if (j_rb_right(tree, sibling).is_present && j_rb_color(tree, j_rb_right(tree, sibling).value) == J_RB_BLACK) {
-                                j_rb_color(tree, j_rb_left(tree, sibling).value) = J_RB_BLACK;
-                                j_rb_color(tree, sibling) = J_RB_RED;
-                                _j_rb_right_rotate(tree, sibling);
-                                msibling = j_rb_right(tree, parent);
-                            }
-                            if_let(sibling, msibling, {
-                                j_rb_color(tree, sibling) = j_rb_color(tree, parent);
-                                j_rb_color(tree, parent) = J_RB_BLACK;
-                                j_rb_color(tree, j_rb_right(tree, sibling).value) = J_RB_BLACK;
-                                _j_rb_left_rotate(tree, parent);
-                                descriptor = j_rb_root(tree).value;
-                            })
-                        }
-                    })
-                })
-            } else {
-                j_maybe(u32) msibling = j_rb_left(tree, parent);
-                if_let(sibling, msibling, {
-                    if (j_rb_color(tree, sibling) == J_RB_RED) {
-                        j_rb_color(tree, sibling) = J_RB_BLACK;
-                        j_rb_color(tree, parent) = J_RB_RED;
-                        _j_rb_right_rotate(tree, parent);
-                        msibling = j_rb_left(tree, parent);
-                    }
-                    if_let(sibling, msibling, {
-                        if (j_rb_right(tree, sibling).is_present && j_rb_color(tree, j_rb_right(tree, sibling).value) == J_RB_BLACK &&
-                            j_rb_left(tree, sibling).is_present && j_rb_color(tree, j_rb_right(tree, sibling).value) == J_RB_BLACK) {
-                            j_rb_color(tree, sibling) = J_RB_RED;
-                            descriptor = parent;
-                        } else {
-                            if (j_rb_left(tree, sibling).is_present && j_rb_color(tree, j_rb_left(tree, sibling).value) == J_RB_BLACK) {
-                                j_rb_color(tree, j_rb_right(tree, sibling).value) = J_RB_BLACK;
-                                j_rb_color(tree, sibling) = J_RB_RED;
-                                _j_rb_left_rotate(tree, sibling);
-                                msibling = j_rb_left(tree, parent);
-                            }
-                            if_let(sibling, msibling, {
-                                j_rb_color(tree, sibling) = j_rb_color(tree, parent);
-                                j_rb_color(tree, parent) = J_RB_BLACK;
-                                j_rb_color(tree, j_rb_left(tree, sibling).value) = J_RB_BLACK;
-                                _j_rb_right_rotate(tree, parent);
-                                descriptor = j_rb_root(tree).value;
-                            })
-                        }
-                    })
-                })
-            }
-        })
-    }
-    j_rb_color(tree, descriptor) = J_RB_BLACK;
+inline StackAllocator j_stack_init(u32 size) {
+    void *ptr = malloc(size);
+    jassert(ptr != NULL, "Out of memory\n");
+    return (StackAllocator) {
+            .size = size,
+            .used = 0,
+            .memory = ptr
+    };
 }
+
+inline void j_stack_destroy(StackAllocator *allocator) {
+    free(allocator->memory);
+    allocator->memory = NULL;
+    allocator->size = 0;
+    allocator->used = 0;
+}
+
+inline PoolAllocator j_pool_init(u32 size, u32 block_size) {
+    void *ptr = malloc(size);
+    jassert(ptr != NULL, "Out of memory\n");
+    return (PoolAllocator) {
+            .stack = { .size = size, .used = 0, .memory = ptr },
+            .block_size = block_size
+    };
+}
+
+inline void j_pool_destroy(PoolAllocator *allocator) {
+    free(allocator->stack.memory);
+    allocator->stack.memory = NULL;
+    allocator->stack.size = 0;
+    allocator->stack.used = 0;
+    allocator->block_size = 0;
+}
+
+//inline ArenaAllocator j_arena_init(u32 size) {
+//    void *ptr = malloc(size);
+//    jassert(ptr != NULL, "Out of memory\n");
+//    ArenaAllocator arena = {
+//            .free_list = EMPTY_ARRAY,
+//            .free_stack = j_pool_init()
+//    };
+//}
+
+int main(void) {
+
+    // Arena allocator
+
+//    StackAllocator stack = j_stack_init(J_KB(4));
+
+    j_list(int) list = EMPTY_ARRAY;
+
+    j_al_append(list, 2);
+
+    while(1) {}
+
+    // Pool style Allocator -> Fixed size, different lifetimes
+    // Temporary Style Allocator -> Random size, short lifetime
+    // Static style Allocator -> Random Size, long lifetime
+
+
+
+    return 0;
+}
+
+
+
+
 
 void print_current_prefix(Str *prefix) {
     for (u32 i = 0; i < j_al_len(prefix); ++i) {
