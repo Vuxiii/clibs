@@ -30,7 +30,6 @@ typedef double f64;
 #define J_TB(x) ((x) * 1024 * 1024 * 1024 * 1024)
 
 
-
 // ======= STRING LIBRARY =======
 
 #define j_list(type) type * _Nullable
@@ -97,6 +96,43 @@ _j_stamp_maybe(j_pair(Str, Str));
 
 #define j_maybe(type) J_MAYBE(type)
 
+// MARK: - Arena Allocator
+
+typedef struct Stack {
+    u64 size;
+    u64 used;
+    void *memory;
+} Stack;
+
+typedef struct ArenaFreeNode {
+    u64 size;
+    struct ArenaFreeNode *next;
+} ArenaFreeNode;
+
+
+// TODO(William): We can add a flag that indicates which type of allocation scheme we want to use here. For example, if we want to just have a linear allocator, we can ignore the free_list. Then the j_alloc function, will check the flags for the specific type of allocation scheme.
+typedef struct Arena {
+    Stack stack;
+    ArenaFreeNode *free_list; // Pointer into above stack allocator
+} Arena;
+
+_j_stamp_maybe(Arena);
+typedef struct ArenaPtr { Arena *arena; } ArenaPtr;
+_j_stamp_maybe(ArenaPtr);
+
+void *j_alloc(Arena *arena, u64 size);
+void j_free(Arena *arena, void *ptr, u64 size);
+void j_init_scratch(Arena *program_memory, i32 arena_count, u64 total_scratch_available);
+j_maybe(ArenaPtr) j_get_scratch();
+void j_release_scratch(Arena *scratch);
+static j_list(j_maybe(Arena)) SCRATCH_ARENAS = NULL; // is_present indicates whether or not it is in use.
+
+/**
+ * @brief Allocates a new arena with the specified size using malloc
+ */
+Arena j_make_arena(u64 size);
+
+// MARK: - Swift Syntax
 
 #define if_let(unwrap_name, maybe_val, block) if ((maybe_val).is_present == true) { typeof((maybe_val).value) unwrap_name = (maybe_val).value; block }
 #define if_let_expr(unwrap_name, maybe_val, expr, block) if ((maybe_val = (expr)).is_present == true) { typeof(maybe_val.value) unwrap_name = maybe_val.value; block }
@@ -108,7 +144,7 @@ typedef Str IStr;
 
 typedef struct FormatOption {
     Str format;
-    const Str (* _Nonnull printer)(va_list * _Nonnull args);
+    const Str (* _Nonnull printer)(Arena *arena, va_list * _Nonnull args);
 } FormatOption;
 
 void __attribute__((overloadable)) print(char *_Nonnull format, ...);
@@ -116,15 +152,17 @@ void __attribute__((overloadable)) print(const Str format, ...);
 
 bool str_eq(const Str a, const Str b);
 bool str_start_with(const Str str, const Str prefix);
-const Str str_concat(const Str prefix, const Str suffix);
+const Str str_concat(Arena *arena, const Str prefix, const Str suffix);
 //Str str_from_cstr(const char * _Nonnull cstr);
 bool str_contains(const Str hay, const Str needle);
-Str str_build_from_arraylist( const j_list(Str) list );
+Str str_build_from_arraylist(Arena *arena, const j_list(Str) list);
 
-const Str __attribute__((overloadable)) str_format(char * _Nonnull format, ...);
-const Str __attribute__((overloadable)) str_format(const Str format, ...);
+const Str __attribute__((overloadable)) str_format(char * _Nonnull format, Arena *arena, ...);
+const Str __attribute__((overloadable)) str_format(const Str format, Arena *arena, ...);
 
-void str_register(const char * _Nonnull format, const Str (* _Nonnull printer)(va_list * _Nonnull args));
+void str_register(Arena *perm_arena,
+                  const char * _Nonnull format,
+                  const Str (* _Nonnull printer)(Arena *arena, va_list * _Nonnull args));
 
 
 /**
@@ -691,7 +729,6 @@ _j_stamp_maybe(FS_Entry);
 // MARK: - ArrayList New
 #define EMPTY_ARRAY NULL
 //#define j_list(type) J_LIST(type)
-typedef struct PoolAllocator PoolAllocator;
 
 typedef struct ArrHeader {
     u64 len;
@@ -701,20 +738,31 @@ typedef struct ArrHeader {
 #define j_al_header(list) ((list) ? cast(ArrHeader *, list) - 1 : EMPTY_ARRAY)
 #define j_al_len(list) ((list) ? j_al_header(list)->len : 0)
 #define j_al_cap(list) ((list) ? j_al_header(list)->cap : 0)
-#define _j_al_init(list) ({\
-    if ((list) == EMPTY_ARRAY) { \
-        (list) = malloc((J_GB(cast(u64, 10)) / sizeof(list[0])) * sizeof(list[0]) + sizeof(ArrHeader)) + sizeof(ArrHeader); \
-        j_al_header(list)->len = 0;      \
-        j_al_header(list)->cap = J_GB(cast(u64, 10)) / sizeof(list[0]);       \
-    }                                      \
+#define _j_al_init(list, arena) ({\
+    if ((list) == EMPTY_ARRAY) {  \
+        (list) = j_alloc(arena, sizeof(list[0]) * 10 + sizeof(ArrHeader)) + sizeof(ArrHeader); \
+        j_al_header(list)->len = 0;                                                                   \
+        j_al_header(list)->cap = 10;                                                                  \
+    }                             \
 })
-#define j_al_append(list, elem) do \
-{                                  \
-    _j_al_init(list);              \
-    jassert(j_al_len(list) < j_al_cap(list), "Not enough memory is reserved for the arraylist\n"); \
-    list[j_al_len(list)] = (elem);   \
-    j_al_header(list)->len += 1;   \
-} while(0)
+#define _j_al_realloc(list, arena) ({ \
+    if (j_al_len(list) == j_al_cap(list)) { \
+        u64 new_cap = j_al_cap(list)*2;     \
+        u64 size = j_al_len(list);    \
+        typeof(list) ptr = j_alloc(arena, sizeof(list[0]) * new_cap + sizeof(ArrHeader)) + sizeof(ArrHeader); \
+        memcpy(ptr, list, sizeof(list[0]) * j_al_cap(list));\
+        j_free(arena, j_al_header(list), sizeof(list[0]) * j_al_cap(list) + sizeof(ArrHeader));     \
+        list = ptr;                   \
+        j_al_header(list)->cap = new_cap;   \
+        j_al_header(list)->len = size;\
+    }                                 \
+})
+#define j_al_append(list, arena, elem) ({ \
+    _j_al_init(list, arena);              \
+    _j_al_realloc(list, arena);           \
+    list[j_al_len(list)] = (elem);        \
+    j_al_header(list)->len += 1;          \
+})
 #define j_al_swap(list, i, j) do \
 {                               \
     typeof(list[i]) temp = list[i]; \
@@ -867,11 +915,14 @@ u64 j_hmap_hash_str(const void *key, size_t len) {
 
 static j_list(FormatOption) options = EMPTY_ARRAY;
 
-void str_register(const char * _Nonnull format, const Str (* _Nonnull printer)(va_list * _Nonnull args)) {
-    j_al_append(options, ((FormatOption) {.format = str_from_cstr(format), .printer = printer}));
+void str_register(Arena *perm_arena, const char * _Nonnull format, const Str (* _Nonnull printer)(Arena *arenaz, va_list * _Nonnull args)) {
+    j_al_append(options, perm_arena, ((FormatOption) {
+        .format = str_from_cstr(format),
+        .printer = printer
+    }));
 }
 
-static const Str i32_Printer(va_list * _Nonnull args) {
+static const Str i32_Printer(Arena *arena, va_list * _Nonnull args) {
     i32 number = va_arg(*args, i32);
     u32 len = 0;
     i32 temp = number;
@@ -886,7 +937,7 @@ static const Str i32_Printer(va_list * _Nonnull args) {
         len++;
         temp /= 10;
     }
-    char *str = (char *)malloc(len + 1);
+    char *str = (char *)j_alloc(arena, len + 1);
     str[len] = '\0';
     temp = number;
     if (temp < 0) {
@@ -903,13 +954,10 @@ static const Str i32_Printer(va_list * _Nonnull args) {
     return (Str){str, len};
 }
 
-static const Str u32_Printer(va_list * _Nonnull args) {
+static const Str u32_Printer(Arena *arena, va_list * _Nonnull args) {
     u32 number = va_arg(*args, u32);
     if (number == 0) {
-        char *str = (char *)malloc(2);
-        str[0] = '0';
-        str[1] = '\0';
-        return (Str){str, 1};
+        return str_from_lit("0");
     }
     u32 len = 0;
 
@@ -918,7 +966,7 @@ static const Str u32_Printer(va_list * _Nonnull args) {
         len++;
         temp /= 10;
     }
-    char *str = (char *)malloc(len + 1);
+    char *str = (char *)j_alloc(arena, len + 1);
     str[len+1] = '\0';
     temp = number;
     for (i32 i = len - 1; i >= 0; i--) {
@@ -928,7 +976,7 @@ static const Str u32_Printer(va_list * _Nonnull args) {
     return (Str){str, len};
 }
 
-static const Str i64_Printer(va_list * _Nonnull args) {
+static const Str i64_Printer(Arena *arena, va_list * _Nonnull args) {
     i64 number = va_arg(*args, i64);
     u32 len = 0;
     i64 temp = number;
@@ -943,7 +991,7 @@ static const Str i64_Printer(va_list * _Nonnull args) {
         len++;
         temp /= 10;
     }
-    char *str = (char *)malloc(len + 1);
+    char *str = (char *)j_alloc(arena, len + 1);
     str[len] = '\0';
     temp = number;
     if (temp < 0) {
@@ -960,13 +1008,10 @@ static const Str i64_Printer(va_list * _Nonnull args) {
     return (Str){str, len};
 }
 
-static const Str u64_Printer(va_list * _Nonnull args) {
+static const Str u64_Printer(Arena *arena, va_list * _Nonnull args) {
     u64 number = va_arg(*args, u64);
     if (number == 0) {
-        char *str = (char *)malloc(2);
-        str[0] = '0';
-        str[1] = '\0';
-        return (Str){str, 1};
+        return str_from_lit("0");
     }
     u32 len = 0;
 
@@ -975,7 +1020,7 @@ static const Str u64_Printer(va_list * _Nonnull args) {
         len++;
         temp /= 10;
     }
-    char *str = (char *)malloc(len + 1);
+    char *str = (char *)j_alloc(arena, len + 1);
     str[len+1] = '\0';
     temp = number;
     for (i32 i = len - 1; i >= 0; i--) {
@@ -985,7 +1030,7 @@ static const Str u64_Printer(va_list * _Nonnull args) {
     return (Str){str, len};
 }
 
-static const Str f32_Printer(va_list * _Nonnull args) {
+static const Str f32_Printer(Arena *arena, va_list * _Nonnull args) {
     f64 number = va_arg(*args, f64);
 
     i32 int_part = (i32)number;
@@ -1017,7 +1062,7 @@ static const Str f32_Printer(va_list * _Nonnull args) {
                 len++;
                 temp /= 10;
             }
-            char *str = (char *)malloc(len + 1);
+            char *str = (char *)j_alloc(arena, len + 1);
             str[len] = '\0';
             temp = int_part;
             if (temp < 0) {
@@ -1045,7 +1090,7 @@ static const Str f32_Printer(va_list * _Nonnull args) {
                 temp = -temp;
             }
             len += pad_with_zero;
-            char *str = (char *)malloc(len + 1);
+            char *str = (char *)j_alloc(arena, len + 1);
             str[len] = '\0';
             temp = frac_part_i32;
             if (temp < 0) {
@@ -1066,11 +1111,11 @@ static const Str f32_Printer(va_list * _Nonnull args) {
     }
 
     const Str dot_str = str_from_lit(".");
-    const Str out = str_concat(int_str, str_concat(dot_str, frac_str));
+    const Str out = str_concat(arena, int_str, str_concat(arena, dot_str, frac_str));
     return out;
 }
 
-static const Str f64_Printer(va_list * _Nonnull args) {
+static const Str f64_Printer(Arena *arena, va_list * _Nonnull args) {
     f64 number = va_arg(*args, f64);
 
     i64 int_part = (i64)number;
@@ -1102,7 +1147,7 @@ static const Str f64_Printer(va_list * _Nonnull args) {
                 len++;
                 temp /= 10;
             }
-            char *str = (char *)malloc(len + 1);
+            char *str = (char *)j_alloc(arena, len + 1);
             str[len] = '\0';
             temp = int_part;
             if (temp < 0) {
@@ -1130,7 +1175,7 @@ static const Str f64_Printer(va_list * _Nonnull args) {
                 temp = -temp;
             }
             len += pad_with_zero;
-            char *str = (char *)malloc(len + 1);
+            char *str = (char *)j_alloc(arena, len + 1);
             str[len] = '\0';
             temp = frac_part_i32;
             if (temp < 0) {
@@ -1151,11 +1196,11 @@ static const Str f64_Printer(va_list * _Nonnull args) {
     }
 
     const Str dot_str = str_from_lit(".");
-    const Str out = str_concat(int_str, str_concat(dot_str, frac_str));
+    const Str out = str_concat(arena, int_str, str_concat(arena, dot_str, frac_str));
     return out;
 }
 
-static const Str bool_Printer(va_list * _Nonnull args) {
+static const Str bool_Printer(Arena *arena, va_list * _Nonnull args) {
     bool i = va_arg(*args, u32);
     if (i) {
         return str_from_lit("true");
@@ -1164,37 +1209,40 @@ static const Str bool_Printer(va_list * _Nonnull args) {
     }
 }
 
-static const Str str_Printer(va_list * _Nonnull args) {
+static const Str str_Printer(Arena *arena, va_list * _Nonnull args) {
     Str str = va_arg(*args, Str);
     return str;
 }
 
-#if defined(__clang__)
-static void init_printers(void) __attribute__((constructor)) {
-    str_register("{i32}", i32_Printer);
-    str_register("{u32}", u32_Printer);
-    str_register("{i64}", i64_Printer);
-    str_register("{u64}", u64_Printer);
-    str_register("{f32}", f32_Printer);
-    str_register("{f64}", f64_Printer);
-    str_register("{bool}", bool_Printer);
-    str_register("{str}", str_Printer);
+//#if defined(__clang__)
+static void init_printers(Arena *arena) { // __attribute__((constructor)) {
+    str_register(arena, "{i32}", i32_Printer);
+    str_register(arena, "{u32}", u32_Printer);
+    str_register(arena, "{i64}", i64_Printer);
+    str_register(arena, "{u64}", u64_Printer);
+    str_register(arena, "{f32}", f32_Printer);
+    str_register(arena, "{f64}", f64_Printer);
+    str_register(arena, "{bool}", bool_Printer);
+    str_register(arena, "{str}", str_Printer);
 }
-#endif
-static inline const Str str_format_impl(const Str format, va_list args ) {
+//#endif
+static inline const Str str_format_impl(Arena *arena, const Str format, va_list args ) {
     Str *strs = EMPTY_ARRAY;
+    j_maybe(ArenaPtr) mscratch = j_get_scratch();
+    jassert(mscratch.is_present, "Precondition: The scratch space must be initialized before calling this function.\n");
+    Arena *scratch = mscratch.value.arena;
     u32 last_printed = 0;
     // Scan through the format string and discover any registered format options.
     for (u32 i = 0; i < format.len; i++) {
         if (format.str[i] == '\\' && format.str[i + 1] == '{') {
             // We want to print upto here, but not the next character.
-            j_al_append(strs, ((Str) { .str = format.str + last_printed, .len = i - last_printed }));
+            j_al_append(strs, scratch, ((Str) { .str = format.str + last_printed, .len = i - last_printed }));
             i++;
             last_printed = i;
             continue;
         }
         if (format.str[i] == '{') {
-            j_al_append(strs, ((Str) { .str = format.str + last_printed, .len = i - last_printed }));
+            j_al_append(strs, scratch, ((Str) { .str = format.str + last_printed, .len = i - last_printed }));
             u32 j = i;
             bool found = false;
             while (j < format.len) {
@@ -1211,8 +1259,8 @@ static inline const Str str_format_impl(const Str format, va_list args ) {
                 found = false;
                 for ( u32 k = 0; k < j_al_len(options); k++ ) {
                     if ( str_eq( option, options[k].format ) ) {
-                        const Str fmt = options[k].printer(&args);
-                        j_al_append(strs, fmt);
+                        const Str fmt = options[k].printer(scratch, &args);
+                        j_al_append(strs, scratch, fmt);
                         i = j;
                         found = true;
                         break;
@@ -1224,27 +1272,26 @@ static inline const Str str_format_impl(const Str format, va_list args ) {
             }
         }
     }
-    j_al_append(strs, ((Str) { .str = format.str + last_printed, .len = format.len - last_printed}));
+    j_al_append(strs, scratch, ((Str) { .str = format.str + last_printed, .len = format.len - last_printed}));
 
-    Str out = str_build_from_arraylist(strs);
-
-    // j_al_free(strs);
+    Str out = str_build_from_arraylist(arena, strs);
+    j_release_scratch(scratch);
     return out;
 }
 
-const Str __attribute__((overloadable)) str_format(char * _Nonnull format_c, ...) {
+const Str __attribute__((overloadable)) str_format(Arena *arena, char * _Nonnull format_c, ...) {
     va_list args;
     va_start(args, format_c);
     const Str format = str_from_cstr(format_c);
-    const Str out = str_format_impl(format, args);
+    const Str out = str_format_impl(arena, format, args);
     va_end(args);
     return out;
 }
 
-const Str __attribute__((overloadable)) str_format(const Str format, ...) {
+const Str __attribute__((overloadable)) str_format(Arena *arena, const Str format, ...) {
     va_list args;
     va_start(args, format);
-    const Str out = str_format_impl(format, args);
+    const Str out = str_format_impl(arena, format, args);
     va_end(args);
     return out;
 }
@@ -1252,23 +1299,30 @@ const Str __attribute__((overloadable)) str_format(const Str format, ...) {
 void __attribute__((overloadable)) print(char * _Nonnull format_c, ...) {
     va_list args;
     va_start(args, format_c);
-    const Str string = str_format_impl(str_from_cstr(format_c), args);
-
+    j_maybe(ArenaPtr) mscratch = j_get_scratch();
+    jassert(mscratch.is_present, "Precondition: The scratch space must be initialized before calling this function.\n");
+    Arena *scratch = mscratch.value.arena;
+    const Str string = str_format_impl(scratch, str_from_cstr(format_c), args);
     write(STDOUT_FILENO, string.str, string.len);
+    j_release_scratch(scratch);
     va_end(args);
 }
 
 void __attribute__((overloadable)) print(const Str format, ...) {
     va_list args;
     va_start(args, format);
-    const Str string = str_format_impl(format, args);
+    j_maybe(ArenaPtr) mscratch = j_get_scratch();
+    jassert(mscratch.is_present, "Precondition: The scratch space must be initialized before calling this function.\n");
+    Arena *scratch = mscratch.value.arena;
+    const Str string = str_format_impl(scratch, format, args);
     write(STDOUT_FILENO, string.str, string.len);
+    j_release_scratch(scratch);
     va_end(args);
 }
 
-const Str str_concat(const Str prefix, const Str suffix) {
+const Str str_concat(Arena *arena, const Str prefix, const Str suffix) {
     u32 len = prefix.len + suffix.len;
-    char *str = (char*)malloc(len + 1);
+    char *str = (char*)j_alloc(arena, len + 1);
     for (u32 i = 0; i < prefix.len; i++) {
         str[i] = prefix.str[i];
     }
@@ -1323,12 +1377,12 @@ bool str_contains(const Str hay, const Str needle) {
     return 0;
 }
 
-Str str_build_from_arraylist( const j_list(Str) list ) {
+Str str_build_from_arraylist(Arena *arena, const j_list(Str) list) {
     u32 total_len = 0;
     for (u32 i = 0; i < j_al_len(list); i++) {
         total_len += list[i].len;
     }
-    char *str = (char*)malloc(total_len + 1);
+    char *str = (char*)j_alloc(arena, total_len + 1);
     u32 offset = 0;
     for (u32 i = 0; i < j_al_len(list); ++i) {
         for (u32 j = 0; j < list[i].len; j++) {
