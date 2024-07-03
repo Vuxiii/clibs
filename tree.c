@@ -287,7 +287,7 @@ int hmap_test(int argc, char **argv) {
     // But again, what is the type. j_pair<Key, Value>? Or just Value *?
 
     // Below can be j_hmap_init(Str, Str)
-    Arena program_memory = j_make_arena(J_MB(5));
+    Arena program_memory = j_make_arena(J_MB(5), 0);
     j_init_scratch(&program_memory, 2, J_MB(1));
     init_printers(&program_memory);
 
@@ -464,7 +464,7 @@ static const Str pair_u32bool_Printer(Arena *arena, va_list * _Nonnull args) {
 }
 
 int redblacktree_test(void) {
-    Arena program_memory = j_make_arena(J_MB(5));
+    Arena program_memory = j_make_arena(J_MB(5), 0);
     j_init_scratch(&program_memory, 2, J_MB(1));
     init_printers(&program_memory);
 
@@ -581,20 +581,99 @@ inline Stack j_stack_init(Arena *arena, u64 size) {
     };
 }
 
-inline void *j_alloc(Arena *arena, u64 size) {
-    jassert(arena->stack.size - arena->stack.used >= size, "The arena is out of memory\n");
-    // Check what kind of allocation scheme we want to use.
-    // For now, we ignore the freelist.
-    
-    void *ptr = arena->stack.memory + arena->stack.used;
-    arena->stack.used += size;
-    return ptr;
+inline void *j_alloc(Arena *arena, u64 size_or_count) {
+    jassert(arena->flags.allocation_scheme_linear + arena->flags.allocation_scheme_pool == 1,
+            "An arena should either use a linear or a pool allocation scheme\n");
+    u64 allocation_amount = size_or_count;
+    if (arena->flags.allocation_scheme_pool) {
+        allocation_amount *= arena->block_size;
+    }
+
+    if (arena->flags.use_free_list) {
+        if (arena->free_list != NULL) {
+            // Strategy: Best Fit
+            ArenaFreeNode *node = arena->free_list;
+            ArenaFreeNode *prev = NULL;
+            ArenaFreeNode *best_fit = NULL;
+            ArenaFreeNode *best_fit_prev = NULL;
+            while (node != NULL) {
+                if (node->size <= allocation_amount) {
+                    if (best_fit == NULL || node->size < best_fit->size) {
+                        best_fit = node;
+                        best_fit_prev = prev;
+                    }
+                }
+                prev = node;
+            }
+            // Did we find a size that fits?
+            if (best_fit != NULL) {
+                void *ptr = best_fit->memory;
+                if (best_fit_prev == NULL) {
+                    arena->free_list = best_fit->next;
+                } else {
+                    best_fit_prev->next = best_fit->next;
+                }
+                return ptr;
+            }
+        }
+        jassert(arena->stack.size - arena->stack.used >= allocation_amount,
+                 "The arena is out of memory\n");
+
+        // We have not found a free block that fits the size. We need to allocate a new block.
+        void *ptr = arena->stack.memory + arena->stack.used;
+        arena->stack.used += sizeof(ArenaFreeNode) + allocation_amount;
+
+        ArenaFreeNode *node = ptr;
+        node->size = allocation_amount;
+        node->next = NULL;
+        node->memory = ptr + sizeof(ArenaFreeNode);
+        return arena->flags.zero_initialized ? memset(node->memory, 0, allocation_amount) : node->memory;
+    } else {
+        jassert(arena->stack.size - arena->stack.used >= allocation_amount,
+                "The arena is out of memory\n");
+
+        void *ptr = arena->stack.memory + arena->stack.used;
+        arena->stack.used += size_or_count;
+        return arena->flags.zero_initialized ? memset(ptr, 0, allocation_amount) : ptr;
+    }
+}
+
+inline void j_reset_arena(Arena *arena) {
+    arena->free_list = NULL;
+    arena->stack.used = 0;
 }
 
 inline void j_free(Arena *arena, void *ptr, u64 size) {
-    jassert(ptr >= arena->stack.memory && ptr < arena->stack.memory + arena->stack.used, "The pointer is not in the arena\n");
-    // Check what kind of allocation scheme we want to use.
-    // For now, we simply noop.
+    jassert(ptr >= arena->stack.memory && ptr < arena->stack.memory + arena->stack.used,
+            "The pointer is not in the arena\n");
+    if (arena->flags.storage_duration_scratch) {
+        // Noop for scratch allocation scheme.
+        return;
+    }
+
+    if (arena->flags.use_free_list) {
+        //TODO: Ensure that below math is correct...
+        ArenaFreeNode *node = ptr - offsetof(ArenaFreeNode, memory);
+
+        // Find the position just before the above node that we want to free.
+        ArenaFreeNode *current = arena->free_list;
+        if (current == NULL) {
+            arena->free_list = node;
+            return;
+        }
+        // We assume that current != NULL for now.
+        while (current->next != NULL && cast(u8 *, current->memory) + current->size < cast(u8 *, node)) {
+            current = current->next;
+        }
+        ArenaFreeNode *next = current->next;
+        current->next = node;
+        node->next = next;
+    } else {
+        // We can only free the memory if we are trying to free the last block that was allocated.
+        if (ptr + size == arena->stack.memory + arena->stack.used) {
+            arena->stack.used -= size;
+        }
+    }
 }
 
 
@@ -610,7 +689,8 @@ void do_stuff(Arena a) {
 }
 
 void j_init_scratch(Arena *program_memory, i32 arena_count, u64 total_scratch_available) {
-    jassert(program_memory->stack.size - program_memory->stack.used >= total_scratch_available, "The total scratch available is larger than the program_memory size\n");
+    jassert(program_memory->stack.size - program_memory->stack.used >= total_scratch_available,
+            "The total scratch available is larger than the program_memory size\n");
 
     void *memory = j_alloc(program_memory, total_scratch_available);
     u64 scratch_size = total_scratch_available / arena_count;
@@ -622,6 +702,11 @@ void j_init_scratch(Arena *program_memory, i32 arena_count, u64 total_scratch_av
                             .used = 0,
                             .size = scratch_size,
                             .memory = memory + i * scratch_size
+                    },
+                    .flags = {
+                            .storage_duration_scratch = 1,
+                            .allocation_scheme_linear = 1,
+                            .zero_initialized = 1,
                     }
             }
         }));
@@ -654,7 +739,7 @@ void j_release_scratch(Arena *scratch) {
     SCRATCH_ARENAS[index].is_present = true;
 }
 
-Arena j_make_arena(u64 size) {
+Arena j_make_arena(u64 size, bool zero_initialize) {
     void *ptr = malloc(size);
     jassert(ptr != NULL, "Could not allocate memory for the arena\n");
     return (Arena) {
@@ -663,6 +748,11 @@ Arena j_make_arena(u64 size) {
                     .size = size,
                     .memory = ptr
             },
+            .flags = {
+                    .allocated_with_malloc = 1,
+                    .storage_duration_permanent = 1,
+                    .zero_initialized = zero_initialize,
+            },
             .free_list = NULL
     };
 }
@@ -670,7 +760,10 @@ Arena j_make_arena(u64 size) {
 int main(void) {
      // Arena allocator
     u64 total_program_memory = J_MB(10);
-    Arena program_memory = j_make_arena(total_program_memory);
+    Arena program_memory = j_make_arena(total_program_memory, 0);
+    program_memory.flags.storage_duration_permanent = 1;
+    program_memory.flags.allocation_scheme_linear = 1;
+    program_memory.flags.use_free_list = 1;
 
     j_init_scratch(&program_memory, 2, J_MB(1));
     init_printers(&program_memory);
@@ -681,7 +774,11 @@ int main(void) {
                     .size = J_KB(1),
                     .memory = j_alloc(&program_memory, J_KB(1))
             },
-            .free_list = NULL,
+            .flags = {
+                    .allocation_scheme_linear = 1,
+                    .storage_duration_scratch = 1,
+                    .use_free_list = 1,
+            },
     };
 
     print("{u32}\n", temp.stack.used);
@@ -709,7 +806,7 @@ void print_current_prefix(Str *prefix) {
 
 int tree(int argc, char **argv) {
 
-    Arena program_memory = j_make_arena(J_MB(5));
+    Arena program_memory = j_make_arena(J_MB(5), 0);
     j_init_scratch(&program_memory, 2, J_MB(1));
     init_printers(&program_memory);
 

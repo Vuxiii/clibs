@@ -105,35 +105,64 @@ typedef struct Stack {
 } Stack;
 
 typedef struct ArenaFreeNode {
-    u64 size;
     struct ArenaFreeNode *next;
+    u64 size;
+    void *memory;
 } ArenaFreeNode;
 
 
-// TODO(William): We can add a flag that indicates which type of allocation scheme we want to use here. For example, if we want to just have a linear allocator, we can ignore the free_list. Then the j_alloc function, will check the flags for the specific type of allocation scheme.
+/**
+ * @brief This struct represents an allocator that can be used to allocate memory. The flags determine the behavior of the allocator and which allocation scheme that should be used.
+ *
+ * The flags are as follows:
+ * - zero_initialized: If true, all memory allocated will be zero initialized.
+ * - storage_duration_permanent: If true, indicates that the memory allocated will only be freed when the program exits.
+ * - storage_duration_scratch: If true, indicates that the memory allocated will not last throughout the duration of the program. Additionally the j_free function will be a noop. To reset the memory, use j_reset_arena.
+ * - use_free_list: If true, indicates that the allocator will use a free list to reclaim freed memory. Uses Best Fit.
+ * - allocation_scheme_pool: If true, indicates that the allocator will allocate blocks of fixed size and the parameter in j_alloc will default to count.
+ * - allocation_scheme_linear: If true, indicates that the allocator will allocate memory linearly. The parameter in j_alloc will default to size.
+ * - allocated_with_malloc: If true, indicates that the memory was allocated with malloc and should be freed with free.
+ * - block_size: The size of the blocks to allocate if using the pool allocation scheme.
+ * - free_list: A pointer into the stack allocator that is used to keep track of free memory.
+ */
 typedef struct Arena {
     Stack stack;
-    ArenaFreeNode *free_list; // Pointer into above stack allocator
+    ArenaFreeNode *free_list;
+    u64 block_size;
+    // TODO: Maybe include a is_valid bool that points to the arena that is was allocated from. And if that becomes invalid, then the arena is invalid.
+    struct {
+        u8 zero_initialized: 1;
+        u8 storage_duration_permanent: 1;
+        u8 storage_duration_scratch: 1; // j_free will be noop if true.
+        u8 use_free_list: 1;            // Uses best_fit_strategy for now.
+        u8 allocation_scheme_pool: 1;
+        u8 allocation_scheme_linear: 1;
+        u8 allocated_with_malloc: 1;
+    } flags;
 } Arena;
 
-_j_stamp_maybe(Arena);
 typedef struct ArenaPtr { Arena *arena; } ArenaPtr;
+_j_stamp_maybe(Arena);
 _j_stamp_maybe(ArenaPtr);
 
-void *j_alloc(Arena *arena, u64 size);
+/**
+ * @brief Allocates size bytes of memory from the arena. For arenas using pool allocation scheme, the size determines the number of elements to allocate of the specified type by the arena.
+ */
+void *j_alloc(Arena *arena, u64 size_or_count);
 void j_free(Arena *arena, void *ptr, u64 size);
 void j_init_scratch(Arena *program_memory, i32 arena_count, u64 total_scratch_available);
 j_maybe(ArenaPtr) j_get_scratch();
 void j_release_scratch(Arena *scratch);
 static j_list(j_maybe(Arena)) SCRATCH_ARENAS = NULL; // is_present indicates whether or not it is in use.
 
+void j_reset_arena(Arena *arena);
+
 /**
- * @brief Allocates a new arena with the specified size using malloc
+ * @brief Allocates a new permanent arena with the specified size using malloc
  */
-Arena j_make_arena(u64 size);
+Arena j_make_arena(u64 size, bool zero_initialized);
 
 // MARK: - Swift Syntax
-
 #define if_let(unwrap_name, maybe_val, block) if ((maybe_val).is_present == true) { typeof((maybe_val).value) unwrap_name = (maybe_val).value; block }
 #define if_let_expr(unwrap_name, maybe_val, expr, block) if ((maybe_val = (expr)).is_present == true) { typeof(maybe_val.value) unwrap_name = maybe_val.value; block }
 
