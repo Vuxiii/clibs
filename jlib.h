@@ -141,7 +141,7 @@ typedef struct Arena {
     } flags;
 } Arena;
 
-typedef struct ArenaPtr { Arena *arena; } ArenaPtr;
+typedef Arena * ArenaPtr;
 _j_stamp_maybe(Arena);
 _j_stamp_maybe(ArenaPtr);
 
@@ -161,6 +161,12 @@ void j_reset_arena(Arena *arena);
  * @brief Allocates a new permanent arena with the specified size using malloc
  */
 Arena j_make_arena(u64 size, bool zero_initialized);
+
+Stack j_alloc_stack(Arena *arena, u64 size);
+
+Arena j_make_scratch(Arena *arena, u64 size);
+
+Arena j_make_pool(Arena *arena, u64 size, u64 block_size);
 
 // MARK: - Swift Syntax
 #define if_let(unwrap_name, maybe_val, block) if ((maybe_val).is_present == true) { typeof((maybe_val).value) unwrap_name = (maybe_val).value; block }
@@ -1259,7 +1265,7 @@ static inline const Str str_format_impl(Arena *arena, const Str format, va_list 
     Str *strs = EMPTY_ARRAY;
     j_maybe(ArenaPtr) mscratch = j_get_scratch();
     jassert(mscratch.is_present, "Precondition: The scratch space must be initialized before calling this function.\n");
-    Arena *scratch = mscratch.value.arena;
+    Arena *scratch = mscratch.value;
     u32 last_printed = 0;
     // Scan through the format string and discover any registered format options.
     for (u32 i = 0; i < format.len; i++) {
@@ -1330,7 +1336,7 @@ void __attribute__((overloadable)) print(char * _Nonnull format_c, ...) {
     va_start(args, format_c);
     j_maybe(ArenaPtr) mscratch = j_get_scratch();
     jassert(mscratch.is_present, "Precondition: The scratch space must be initialized before calling this function.\n");
-    Arena *scratch = mscratch.value.arena;
+    Arena *scratch = mscratch.value;
     const Str string = str_format_impl(scratch, str_from_cstr(format_c), args);
     write(STDOUT_FILENO, string.str, string.len);
     j_release_scratch(scratch);
@@ -1342,7 +1348,7 @@ void __attribute__((overloadable)) print(const Str format, ...) {
     va_start(args, format);
     j_maybe(ArenaPtr) mscratch = j_get_scratch();
     jassert(mscratch.is_present, "Precondition: The scratch space must be initialized before calling this function.\n");
-    Arena *scratch = mscratch.value.arena;
+    Arena *scratch = mscratch.value;
     const Str string = str_format_impl(scratch, format, args);
     write(STDOUT_FILENO, string.str, string.len);
     j_release_scratch(scratch);

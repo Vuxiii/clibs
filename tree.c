@@ -573,14 +573,6 @@ int redblacktree_test(void) {
     return 0;
 }
 
-inline Stack j_stack_init(Arena *arena, u64 size) {
-    return (Stack) {
-            .size = size,
-            .used = 0,
-            .memory = j_alloc(arena, size)
-    };
-}
-
 inline void *j_alloc(Arena *arena, u64 size_or_count) {
     jassert(arena->flags.allocation_scheme_linear + arena->flags.allocation_scheme_pool == 1,
             "An arena should either use a linear or a pool allocation scheme\n");
@@ -706,7 +698,6 @@ void j_init_scratch(Arena *program_memory, i32 arena_count, u64 total_scratch_av
                     .flags = {
                             .storage_duration_scratch = 1,
                             .allocation_scheme_linear = 1,
-                            .zero_initialized = 1,
                     }
             }
         }));
@@ -718,7 +709,7 @@ j_maybe(ArenaPtr) j_get_scratch() {
         j_maybe(Arena) *m = &SCRATCH_ARENAS[i];
         if (m->is_present) {
             SCRATCH_ARENAS[i].is_present = false;
-            return (j_maybe(ArenaPtr)) { .is_present = true, .value = { .arena = &m->value } };
+            return (j_maybe(ArenaPtr)) { .is_present = true, .value = &m->value };
         }
     }
     return (j_maybe(ArenaPtr)) { .is_present = false };
@@ -757,6 +748,34 @@ Arena j_make_arena(u64 size, bool zero_initialize) {
     };
 }
 
+Stack j_alloc_stack(Arena *arena, u64 size) {
+    return (Stack) {
+        .used = 0,
+        .size = size,
+        .memory = j_alloc(arena, size)
+    };
+}
+
+Arena j_make_scratch(Arena *arena, u64 size) {
+    return (Arena) {
+        .stack = j_alloc_stack(arena, size),
+        .flags = {
+                .allocation_scheme_linear = true,
+                .storage_duration_scratch = true,
+        }
+    };
+}
+
+Arena j_make_pool(Arena *arena, u64 size, u64 block_size) {
+    return (Arena) {
+        .stack = j_alloc_stack(arena, size),
+        .flags = {
+                .allocation_scheme_pool = true,
+        },
+        .block_size = block_size
+    };
+}
+
 int main(void) {
      // Arena allocator
     u64 total_program_memory = J_MB(10);
@@ -768,18 +787,8 @@ int main(void) {
     j_init_scratch(&program_memory, 2, J_MB(1));
     init_printers(&program_memory);
 
-    Arena temp = {
-            .stack = {
-                    .used = 0,
-                    .size = J_KB(1),
-                    .memory = j_alloc(&program_memory, J_KB(1))
-            },
-            .flags = {
-                    .allocation_scheme_linear = 1,
-                    .storage_duration_scratch = 1,
-                    .use_free_list = 1,
-            },
-    };
+    Arena temp = j_make_scratch(&program_memory, J_KB(1));
+    temp.flags.use_free_list = true;
 
     print("{u32}\n", temp.stack.used);
     do_stuff(temp);
