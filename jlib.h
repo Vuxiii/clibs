@@ -1,5 +1,6 @@
 #ifndef JLIB_H
 #define JLIB_H
+#define JLIB_VERSION 1.5
 #include <printf.h>
 #include <stdlib.h>
 #include <assert.h>
