@@ -1,6 +1,6 @@
 #ifndef JLIB_H
 #define JLIB_H
-#define JLIB_VERSION 1.5
+#define JLIB_VERSION 1.5.1
 #include <printf.h>
 #include <stdlib.h>
 #include <assert.h>
@@ -393,6 +393,233 @@ void _j_rb_insert_fixup(void *tree, u32 descriptor);
 void _j_rb_delete_fixup(void *tree, u32 descriptor);
 void j_rb_delete(void *tree, u32 descriptor);
 
+#define EMPTY_ARRAY NULL
+// MARK: - ArrayList New
+//#define j_list(type) J_LIST(type)
+
+typedef struct ArrHeader {
+    u64 len;
+    u64 cap;
+} ArrHeader;
+
+#define j_al_header(list) ((list) ? cast(ArrHeader *, list) - 1 : EMPTY_ARRAY)
+#define j_al_len(list) ((list) ? j_al_header(list)->len : 0)
+#define j_al_cap(list) ((list) ? j_al_header(list)->cap : 0)
+#define _j_al_init(list, arena) ({\
+    if ((list) == EMPTY_ARRAY) {  \
+        (list) = j_alloc(arena, sizeof(list[0]) * 10 + sizeof(ArrHeader)) + sizeof(ArrHeader); \
+        j_al_header(list)->len = 0;                                                                   \
+        j_al_header(list)->cap = 10;                                                                  \
+    }                             \
+})
+#define _j_al_realloc(list, arena) ({ \
+    if (j_al_len(list) == j_al_cap(list)) { \
+        u64 new_cap = j_al_cap(list)*2;     \
+        u64 size = j_al_len(list);    \
+        typeof(list) ptr = j_alloc(arena, sizeof(list[0]) * new_cap + sizeof(ArrHeader)) + sizeof(ArrHeader); \
+        memcpy(ptr, list, sizeof(list[0]) * j_al_cap(list));\
+        j_free(arena, j_al_header(list), sizeof(list[0]) * j_al_cap(list) + sizeof(ArrHeader));     \
+        list = ptr;                   \
+        j_al_header(list)->cap = new_cap;   \
+        j_al_header(list)->len = size;\
+    }                                 \
+})
+#define j_al_append(list, arena, elem) ({ \
+    _j_al_init(list, arena);              \
+    _j_al_realloc(list, arena);           \
+    list[j_al_len(list)] = (elem);        \
+    j_al_header(list)->len += 1;          \
+})
+#define j_al_swap(list, i, j) do \
+{                               \
+    typeof(list[i]) temp = list[i]; \
+    list[i] = list[j];            \
+    list[j] = temp;               \
+} while(0)
+#define j_al_removeLast(list) (j_al_header(list)->len -= 1, list[j_al_len(list)])
+#define j_al_removeFirst(list) (memmove(list, list+1, sizeof(list[0]) * (j_al_len(list)-1)), j_al_header(list)->len -= 1)
+#define j_al_last(list) ((list)[j_al_len(list)-1])
+
+
+
+
+
+/**
+ * @brief Skips the elements from the substring that satisfies the predicate
+ */
+#define j_ss_remove_while(ss, pred) do { \
+    char j_ss_it;                                   \
+    while ((ss)->str.len > 0 && (j_ss_it = *(ss)->str.str, (pred))) { \
+        j_ss_remove_first(ss);                                  \
+    }\
+} while(0)
+
+
+/**
+ * @brief returns the first index where the predicate is true
+ */
+#define j_ss_first_index_where(ss, pred) ({ \
+    Str j_ss_it = (ss).str; \
+    u32 j_ss_index = 0; \
+    while (j_ss_index < (ss).str.len && !(pred)) { \
+        j_ss_index++;                       \
+        j_ss_it.str++;                      \
+        j_ss_it.len--;                      \
+    } \
+    j_ss_index; \
+})
+
+/**
+ * @brief Returns a substring from the start of the substring up until the predicate returns false.
+ */
+#define j_ss_prefix_while(ss, pred) ({ \
+    SubStr temp = (ss);                \
+    temp.str.len = 0;                  \
+    char j_ss_it;                      \
+    while (temp.str.len < (ss).str.len && (j_ss_it = temp.str.str[temp.str.len], (pred))) { \
+        temp.str.len++;                \
+    }                                  \
+    temp;                              \
+})
+
+/**
+ * @brief resets the SubString to the original String
+ */
+#define j_ss_reset(ss) (ss).str = *(ss).base
+
+
+enum J_FS_WALK_OPTIONS {
+    J_FS_WALK_INCLUDE_FOLDER,
+    J_FS_WALK_INCLUDE_REGULAR,
+    J_FS_WALK_ORDER_LEXICOGRAPHIC, // TODO: William Implement me
+    J_FS_WALK_COUNT_FOLDER_ENTRIES, // TODO: William Implement me
+    J_FS_WALK_INCLUDE_DOT, // TODO: William Implement me
+    J_FS_WALK_INCLUDE_DOTDOT, // TODO: William Implement me
+};
+
+typedef struct Path {
+    Str  * _Nullable components;
+} Path;
+
+typedef struct FS_Dir {
+    DIR * _Nullable dir;
+    i32 remaining_entries;
+} FS_Dir;
+
+// Currently only supports directories and files.
+// TODO: William Give this an arena allocator to cleanup the memory easier.
+typedef struct FS_Walker {
+    FS_Dir * _Nullable open_directories;
+    Path path;
+    u32 options;
+} FS_Walker;
+
+typedef struct FS_Entry {
+    bool is_last;
+    struct dirent * _Nullable dirent;
+} FS_Entry;
+
+_j_stamp_maybe(FS_Walker);
+_j_stamp_maybe(FS_Entry);
+// MARK: - Bit Field
+
+#define j_bit_set(field, bit) ((field) |= (cast(typeof(field), 1) << (bit)))
+#define j_bit_check(field, bit) (!!((field) & (cast(typeof(field), 1) << (bit))))
+
+
+
+static void init_printers(Arena *arena);
+
+
+static u64 j_hmap_generic_hash(const void *key, size_t len);
+static bool j_hmap_generic_compare(const void *lhs, const void *rhs, size_t len);
+
+#define j_hmap(ktp, vtp) j_maybe( j_pair(ktp,vtp) ) * _Nullable
+#define EMPTY_HMAP NULL
+
+typedef struct HMapHeader {
+    u32 cap; // It is going to be quite expensive to realloc the map because we need to rehash all the keys.
+    u32 len;
+    bool (*compare)(const void *lhs, const void *rhs, size_t len);
+    u64 (*hasher)(const void *key, size_t len);
+} HMapHeader;
+
+u32 j_hmap_get_slot_for_key(HMapHeader *map, void *key, size_t key_size, size_t entry_size);
+
+
+#define j_hmap_header(map) ((map) ? cast(HMapHeader *, map) - 1 : EMPTY_HMAP)
+#define _j_hmap_init_compare(map, compare_func) j_hmap_header(map)->compare = (compare_func)
+#define _j_hmap_init_hasher(map, hasher_func) j_hmap_header(map)->hasher = (hasher_func)
+#define j_hmap_init(map, hasher_func, compare_func, capacity) \
+({                       \
+    if ((map) == EMPTY_HMAP) { \
+        (map) = calloc(capacity, sizeof(map[0]) + sizeof(HMapHeader)) + sizeof(HMapHeader); \
+        j_hmap_header(map)->len = 0;                                                   \
+        j_hmap_header(map)->cap = (capacity);      \
+        _j_hmap_init_compare(map, compare_func);                                        \
+        _j_hmap_init_hasher(map, hasher_func);                                        \
+    }                                      \
+})
+
+#define j_hmap_cap(map) ((map) ? j_hmap_header(map)->cap : 0)
+#define j_hmap_len(map) ((map) ? j_hmap_header(map)->len : 0)
+#define _j_hmap_next_size(map) (j_hmap_cap(map) * sizeof(map[0]) * 2)
+#define j_hmap_put(map, key, valuet) \
+({                                  \
+    j_hmap_init(map, j_hmap_generic_hash, j_hmap_generic_compare, 10); \
+    jassert(j_hmap_len(map) < j_hmap_cap(map), "Precondition: There must be room for the entry inside the hashmap"); \
+    u32 index = j_hmap_get_slot_for_key(j_hmap_header(map), &key, sizeof(key), sizeof(map[0])); \
+    map[index].value.first = key;   \
+    map[index].value.second = (valuet);\
+    map[index].is_present = true;   \
+})
+#define j_hmap_remove(map, key) \
+({                              \
+    u32 index = j_hmap_get_slot_for_key(j_hmap_header(map), &key, sizeof(key), sizeof(map[0])); \
+    jassert(map[index].is_present == true, "Precondition: The key MUST be in the map before removing it!\n"); \
+    map[index].is_present = false;                                                              \
+    j_hmap_header(map)->len--;  \
+})
+#define j_hmap_removeAll(map) do \
+{                               \
+    for (u32 i = 0; i < j_hmap_cap(map); i++) { \
+        map[i].is_present = false; \
+    }                           \
+    j_hmap_header(map)->len = 0; \
+} while(0)
+#define j_hmap_get(map, key) ({ \
+    u32 index = j_hmap_header(map)->hasher(&key, sizeof(key)) % j_hmap_cap(map); \
+    u32 offset = 0;                            \
+    while (j_hmap_header(map)->compare(&map[(index+offset)].value.first, &key, sizeof(key)) == false) { \
+        offset += 1;            \
+        if (index+offset == j_hmap_cap(map)) {                                   \
+            index = 0;                        \
+        }                        \
+        jassert(offset < j_hmap_cap(map), "Precondition: The key must exist in the hmap before calling this function.\n"); \
+    }                           \
+    print("Get on Index: {u32}\n", (index + offset));           \
+    map[(index+offset)].value.second;                          \
+})
+#define j_hmap_is_empty(map) (j_hmap_len(map) == 0)
+#define j_hmap_iter_next(map, it) ({ \
+    u32 index = (it).value + 1; \
+    while (index < j_hmap_cap(map)) { \
+        if (map[index].is_present) { \
+            break; \
+        } \
+        index++; \
+    }                       \
+    Maybeu32 res = {0};                        \
+    if (index == j_hmap_cap(map)) {   \
+        res.is_present = false;\
+    } else {                \
+        res.is_present = true;        \
+        res.value = index;  \
+    }                       \
+    res;                    \
+})
+#define j_hmap_iter(map) j_hmap_iter_next(map, ((Maybeu32){false, -1}))
+#define j_hmap_iter_get(map, it) (jassert((it).is_present == true, "Precondition: Cannot call get on an nil value"), map[(it).value].value)
 
 #endif
 #ifdef JLIB_IMPL
@@ -619,15 +846,7 @@ void j_ss_remove_first_n(SubStr *ss, u32 n) {
     ss->str.len -= n;
 }
 
-/**
- * @brief Skips the elements from the substring that satisfies the predicate
- */
-#define j_ss_remove_while(ss, pred) do { \
-    char j_ss_it;                                   \
-    while ((ss)->str.len > 0 && (j_ss_it = *(ss)->str.str, (pred))) { \
-        j_ss_remove_first(ss);                                  \
-    }\
-} while(0)
+
 
 Maybeu32 j_ss_first_index_of_c(SubStr ss, char c) {
     u32 j_ss_index = 0;
@@ -653,19 +872,7 @@ Maybeu32 j_ss_first_index_of_str(SubStr ss, Str needle) {
     return (Maybeu32) { .is_present = true, .value = index };
 }
 
-/**
- * @brief returns the first index where the predicate is true
- */
-#define j_ss_first_index_where(ss, pred) ({ \
-    Str j_ss_it = (ss).str; \
-    u32 j_ss_index = 0; \
-    while (j_ss_index < (ss).str.len && !(pred)) { \
-        j_ss_index++;                       \
-        j_ss_it.str++;                      \
-        j_ss_it.len--;                      \
-    } \
-    j_ss_index; \
-})
+
 
 SubStr j_ss_prefix_up_to(SubStr ss, u32 n) {
     jassert(n > 1 && n <= ss.str.len, "Precondition: The position must not be larger than the length of the substring\n");
@@ -680,23 +887,6 @@ SubStr j_ss_prefix_through(SubStr ss, u32 n) {
     return ss;
 }
 
-/**
- * @brief Returns a substring from the start of the substring up until the predicate returns false.
- */
-#define j_ss_prefix_while(ss, pred) ({ \
-    SubStr temp = (ss);                \
-    temp.str.len = 0;                  \
-    char j_ss_it;                      \
-    while (temp.str.len < (ss).str.len && (j_ss_it = temp.str.str[temp.str.len], (pred))) { \
-        temp.str.len++;                \
-    }                                  \
-    temp;                              \
-})
-
-/**
- * @brief resets the SubString to the original String
- */
-#define j_ss_reset(ss) (ss).str = *(ss).base
 
 MaybeSubStr j_ss_split_on_first_str(SubStr *ss, Str seperator) {
     Maybeu32 mindex = j_ss_first_index_of_str(*ss, seperator);
@@ -716,99 +906,12 @@ void j_ss_trim_front_whitespace(SubStr *ss) {
 
 // MARK: - FileSystem
 
-enum J_FS_WALK_OPTIONS {
-    J_FS_WALK_INCLUDE_FOLDER,
-    J_FS_WALK_INCLUDE_REGULAR,
-    J_FS_WALK_ORDER_LEXICOGRAPHIC, // TODO: William Implement me
-    J_FS_WALK_COUNT_FOLDER_ENTRIES, // TODO: William Implement me
-    J_FS_WALK_INCLUDE_DOT, // TODO: William Implement me
-    J_FS_WALK_INCLUDE_DOTDOT, // TODO: William Implement me
-};
-
-typedef struct Path {
-    Str  * _Nullable components;
-} Path;
-
-typedef struct FS_Dir {
-    DIR * _Nullable dir;
-    i32 remaining_entries;
-} FS_Dir;
-
-// Currently only supports directories and files.
-// TODO: William Give this an arena allocator to cleanup the memory easier.
-typedef struct FS_Walker {
-    FS_Dir * _Nullable open_directories;
-    Path path;
-    u32 options;
-} FS_Walker;
-
-typedef struct FS_Entry {
-    bool is_last;
-    struct dirent * _Nullable dirent;
-} FS_Entry;
-
-_j_stamp_maybe(FS_Walker);
-_j_stamp_maybe(FS_Entry);
-// MARK: - Bit Field
-
-#define j_bit_set(field, bit) ((field) |= (cast(typeof(field), 1) << (bit)))
-#define j_bit_check(field, bit) (!!((field) & (cast(typeof(field), 1) << (bit))))
-
-
-
 // MARK: - Basic Data Structures Stamps
 
 
 
 //TODO: William Also do a j_view(type)
 
-// MARK: - ArrayList New
-#define EMPTY_ARRAY NULL
-//#define j_list(type) J_LIST(type)
-
-typedef struct ArrHeader {
-    u64 len;
-    u64 cap;
-} ArrHeader;
-
-#define j_al_header(list) ((list) ? cast(ArrHeader *, list) - 1 : EMPTY_ARRAY)
-#define j_al_len(list) ((list) ? j_al_header(list)->len : 0)
-#define j_al_cap(list) ((list) ? j_al_header(list)->cap : 0)
-#define _j_al_init(list, arena) ({\
-    if ((list) == EMPTY_ARRAY) {  \
-        (list) = j_alloc(arena, sizeof(list[0]) * 10 + sizeof(ArrHeader)) + sizeof(ArrHeader); \
-        j_al_header(list)->len = 0;                                                                   \
-        j_al_header(list)->cap = 10;                                                                  \
-    }                             \
-})
-#define _j_al_realloc(list, arena) ({ \
-    if (j_al_len(list) == j_al_cap(list)) { \
-        u64 new_cap = j_al_cap(list)*2;     \
-        u64 size = j_al_len(list);    \
-        typeof(list) ptr = j_alloc(arena, sizeof(list[0]) * new_cap + sizeof(ArrHeader)) + sizeof(ArrHeader); \
-        memcpy(ptr, list, sizeof(list[0]) * j_al_cap(list));\
-        j_free(arena, j_al_header(list), sizeof(list[0]) * j_al_cap(list) + sizeof(ArrHeader));     \
-        list = ptr;                   \
-        j_al_header(list)->cap = new_cap;   \
-        j_al_header(list)->len = size;\
-    }                                 \
-})
-#define j_al_append(list, arena, elem) ({ \
-    _j_al_init(list, arena);              \
-    _j_al_realloc(list, arena);           \
-    list[j_al_len(list)] = (elem);        \
-    j_al_header(list)->len += 1;          \
-})
-#define j_al_swap(list, i, j) do \
-{                               \
-    typeof(list[i]) temp = list[i]; \
-    list[i] = list[j];            \
-    list[j] = temp;               \
-} while(0)
-#define j_al_removeLast(list) (j_al_header(list)->len -= 1, list[j_al_len(list)])
-#define j_al_removeFirst(list) (memmove(list, list+1, sizeof(list[0]) * (j_al_len(list)-1)), j_al_header(list)->len -= 1)
-#define j_al_last(list) ((list)[j_al_len(list)-1])
-#define j_al_free(list) (free(j_al_header(list)), list = NULL)
 
 
 // MARK: - Arena Allocator
@@ -1025,15 +1128,6 @@ static bool j_hmap_generic_compare(const void *lhs, const void *rhs, size_t len)
     return memcmp(lhs, rhs, len) == 0;
 }
 
-#define j_hmap(ktp, vtp) j_maybe( j_pair(ktp,vtp) ) * _Nullable
-#define EMPTY_HMAP NULL
-
-typedef struct HMapHeader {
-    u32 cap; // It is going to be quite expensive to realloc the map because we need to rehash all the keys.
-    u32 len;
-    bool (*compare)(const void *lhs, const void *rhs, size_t len);
-    u64 (*hasher)(const void *key, size_t len);
-} HMapHeader;
 
 u32 j_hmap_get_slot_for_key(HMapHeader *map, void *key, size_t key_size, size_t entry_size) {
     jassert(map->len < map->cap, "Precondition: The map must have space for the new entry.\n");
@@ -1057,79 +1151,6 @@ u32 j_hmap_get_slot_for_key(HMapHeader *map, void *key, size_t key_size, size_t 
     return index;
 }
 
-#define j_hmap_header(map) ((map) ? cast(HMapHeader *, map) - 1 : EMPTY_HMAP)
-#define _j_hmap_init_compare(map, compare_func) j_hmap_header(map)->compare = (compare_func)
-#define _j_hmap_init_hasher(map, hasher_func) j_hmap_header(map)->hasher = (hasher_func)
-#define j_hmap_init(map, hasher_func, compare_func, capacity) \
-({                       \
-    if ((map) == EMPTY_HMAP) { \
-        (map) = calloc(capacity, sizeof(map[0]) + sizeof(HMapHeader)) + sizeof(HMapHeader); \
-        j_hmap_header(map)->len = 0;                                                   \
-        j_hmap_header(map)->cap = (capacity);      \
-        _j_hmap_init_compare(map, compare_func);                                        \
-        _j_hmap_init_hasher(map, hasher_func);                                        \
-    }                                      \
-})
-
-#define j_hmap_cap(map) ((map) ? j_hmap_header(map)->cap : 0)
-#define j_hmap_len(map) ((map) ? j_hmap_header(map)->len : 0)
-#define _j_hmap_next_size(map) (j_hmap_cap(map) * sizeof(map[0]) * 2)
-#define j_hmap_put(map, key, valuet) \
-({                                  \
-    j_hmap_init(map, j_hmap_generic_hash, j_hmap_generic_compare, 10); \
-    jassert(j_hmap_len(map) < j_hmap_cap(map), "Precondition: There must be room for the entry inside the hashmap"); \
-    u32 index = j_hmap_get_slot_for_key(j_hmap_header(map), &key, sizeof(key), sizeof(map[0])); \
-    map[index].value.first = key;   \
-    map[index].value.second = (valuet);\
-    map[index].is_present = true;   \
-})
-#define j_hmap_remove(map, key) \
-({                              \
-    u32 index = j_hmap_get_slot_for_key(j_hmap_header(map), &key, sizeof(key), sizeof(map[0])); \
-    jassert(map[index].is_present == true, "Precondition: The key MUST be in the map before removing it!\n"); \
-    map[index].is_present = false;                                                              \
-    j_hmap_header(map)->len--;  \
-})
-#define j_hmap_removeAll(map) do \
-{                               \
-    for (u32 i = 0; i < j_hmap_cap(map); i++) { \
-        map[i].is_present = false; \
-    }                           \
-    j_hmap_header(map)->len = 0; \
-} while(0)
-#define j_hmap_get(map, key) ({ \
-    u32 index = j_hmap_header(map)->hasher(&key, sizeof(key)) % j_hmap_cap(map); \
-    u32 offset = 0;                            \
-    while (j_hmap_header(map)->compare(&map[(index+offset)].value.first, &key, sizeof(key)) == false) { \
-        offset += 1;            \
-        if (index+offset == j_hmap_cap(map)) {                                   \
-            index = 0;                        \
-        }                        \
-        jassert(offset < j_hmap_cap(map), "Precondition: The key must exist in the hmap before calling this function.\n"); \
-    }                           \
-    print("Get on Index: {u32}\n", (index + offset));           \
-    map[(index+offset)].value.second;                          \
-})
-#define j_hmap_is_empty(map) (j_hmap_len(map) == 0)
-#define j_hmap_iter_next(map, it) ({ \
-    u32 index = (it).value + 1; \
-    while (index < j_hmap_cap(map)) { \
-        if (map[index].is_present) { \
-            break; \
-        } \
-        index++; \
-    }                       \
-    Maybeu32 res = {0};                        \
-    if (index == j_hmap_cap(map)) {   \
-        res.is_present = false;\
-    } else {                \
-        res.is_present = true;        \
-        res.value = index;  \
-    }                       \
-    res;                    \
-})
-#define j_hmap_iter(map) j_hmap_iter_next(map, ((Maybeu32){false, -1}))
-#define j_hmap_iter_get(map, it) (jassert((it).is_present == true, "Precondition: Cannot call get on an nil value"), map[(it).value].value)
 
 bool j_hmap_compare_str(const void *lhs, const void *rhs, size_t len) {
     return str_eq(*(Str *)lhs, *(Str *)rhs);
